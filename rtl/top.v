@@ -260,15 +260,16 @@ module top #(
     // -----------------------------------------------------------------
     // VGA output gating
     // Pipeline depth from h_count to filter_out:
-    //   vga_timing rd_addr reg (1) + frame_buffer BRAM (1) + filter_pipeline (2) = 4
-    // Delay active_video by 4 cycles to gate output cleanly.
+    //   vga_timing rd_addr (comb) + frame_buffer BRAM (1) + filter_pipeline (1) = 2
+    // Delay active_video by 2 cycles. Edge mode is 1 cycle deeper but its
+    // leftmost-column gating in filter_edge handles the extra pixel.
     // -----------------------------------------------------------------
-    reg [3:0] active_pipe;
+    reg [1:0] active_pipe;
     always @(posedge clk_25) begin
-        if (sys_rst) active_pipe <= 4'd0;
-        else         active_pipe <= {active_pipe[2:0], active_video};
+        if (sys_rst) active_pipe <= 2'd0;
+        else         active_pipe <= {active_pipe[0], active_video};
     end
-    wire active_d = active_pipe[3];
+    wire active_d = active_pipe[1];
 
     assign vga_r = active_d ? filter_out[11:8] : 4'h0;
     assign vga_g = active_d ? filter_out[7:4]  : 4'h0;

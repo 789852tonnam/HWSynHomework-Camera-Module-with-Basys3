@@ -5,10 +5,10 @@
 // V: active=480, FP=10, sync=2,  BP=29 -> total 521
 // HSYNC and VSYNC are active-LOW.
 //
-// rd_addr is generated as base_of_row + h_count using a running line base
-// (no per-pixel multiplication). The output is registered once; the consumer
-// (frame buffer) adds one more cycle of read latency, so the caller should
-// delay active_video by one cycle when gating VGA output.
+// rd_addr is combinational (base_of_row + h_count) using a running line base
+// accumulator (no per-pixel multiplication). The frame buffer adds 1 cycle
+// of BRAM read latency, so the caller should delay active_video to match the
+// downstream pipeline when gating VGA output.
 
 module vga_timing (
     input  wire        clk,
@@ -18,7 +18,7 @@ module vga_timing (
     output wire        hsync,
     output wire        vsync,
     output wire        active_video,
-    output reg  [18:0] rd_addr
+    output wire [18:0] rd_addr
 );
 
     localparam H_ACTIVE = 10'd640;
@@ -41,7 +41,6 @@ module vga_timing (
     initial begin
         h_count = 10'd0;
         v_count = 10'd0;
-        rd_addr = 19'd0;
     end
 
     // -----------------------------------------------------------------
@@ -84,11 +83,6 @@ module vga_timing (
     end
 
     wire in_active = (h_count < H_ACTIVE) && (v_count < V_ACTIVE);
-    wire [18:0] rd_addr_cur = in_active ? (line_base + {9'd0, h_count}) : 19'd0;
-
-    always @(posedge clk) begin
-        if (rst) rd_addr <= 19'd0;
-        else     rd_addr <= rd_addr_cur;
-    end
+    assign rd_addr = in_active ? (line_base + {9'd0, h_count}) : 19'd0;
 
 endmodule

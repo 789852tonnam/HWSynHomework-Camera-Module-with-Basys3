@@ -3,11 +3,15 @@
 //
 // Math (BT.601, simplified to small signed offsets in 4-bit RGB space):
 //   y4   = (Y3 << 1) | dither2x2     (0..15, dithered)
-//   r4   = clamp(y4 + offsetR(Cr))   offsetR(Cr) = {-3, -1, +1, +3}
-//   b4   = clamp(y4 + offsetB(Cb))   offsetB(Cb) = {-3, -1, +1, +3}
+//   r4   = clamp(y4 + offsetR(Cr))   offsetR(Cr) = {-3,  0, +2, +3}
+//   b4   = clamp(y4 + offsetB(Cb))   offsetB(Cb) = {-3,  0, +2, +3}
 //   g4   = clamp(y4 + offsetG_Cr(Cr) + offsetG_Cb(Cb))
-//          offsetG_Cr  ~ -(3/4)*offsetR -> {+2, +1, -1, -2}
-//          offsetG_Cb  ~ -(1/3)*offsetB -> {+1,  0,  0, -1}
+//          offsetG_Cr  ~ -(3/4)*offsetR -> {+2,  0, -2, -2}
+//          offsetG_Cb  ~ -(1/3)*offsetB -> {+1,  0, -1, -1}
+//
+// Bin 1 is the "neutral" bin (covers diff in [-16, +16) per cam_capture). Its
+// offset MUST be 0 so that R=G=B inputs decode back to R=G=B output — otherwise
+// the whole frame picks up a chroma tint. Bins 2 and 3 keep monotonicity.
 //
 // Replaces the 16-case green lookup in the previous design with two small
 // signed LUTs and a single signed add. Output channels are clamped to 0..15.
@@ -29,8 +33,8 @@ module ycbcr_to_rgb444 (
     reg signed [2:0] r_off;
     always @(*) case (in_cr)
         2'd0:    r_off = -3'sd3;
-        2'd1:    r_off = -3'sd1;
-        2'd2:    r_off =  3'sd1;
+        2'd1:    r_off =  3'sd0;
+        2'd2:    r_off =  3'sd2;
         default: r_off =  3'sd3;
     endcase
 
@@ -38,8 +42,8 @@ module ycbcr_to_rgb444 (
     reg signed [2:0] b_off;
     always @(*) case (in_cb)
         2'd0:    b_off = -3'sd3;
-        2'd1:    b_off = -3'sd1;
-        2'd2:    b_off =  3'sd1;
+        2'd1:    b_off =  3'sd0;
+        2'd2:    b_off =  3'sd2;
         default: b_off =  3'sd3;
     endcase
 
@@ -47,8 +51,8 @@ module ycbcr_to_rgb444 (
     reg signed [2:0] g_off_cr;
     always @(*) case (in_cr)
         2'd0:    g_off_cr =  3'sd2;
-        2'd1:    g_off_cr =  3'sd1;
-        2'd2:    g_off_cr = -3'sd1;
+        2'd1:    g_off_cr =  3'sd0;
+        2'd2:    g_off_cr = -3'sd2;
         default: g_off_cr = -3'sd2;
     endcase
 
@@ -57,7 +61,7 @@ module ycbcr_to_rgb444 (
     always @(*) case (in_cb)
         2'd0:    g_off_cb =  3'sd1;
         2'd1:    g_off_cb =  3'sd0;
-        2'd2:    g_off_cb =  3'sd0;
+        2'd2:    g_off_cb = -3'sd1;
         default: g_off_cb = -3'sd1;
     endcase
 
