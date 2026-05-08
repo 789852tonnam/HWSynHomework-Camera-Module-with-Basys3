@@ -1,76 +1,65 @@
 `timescale 1ns/1ps
-// top.v
-// Top-level module for the FPGA real-time video pipeline.
-// Target: Digilent Basys 3 (Xilinx Artix-7 XC7A35T)
+// Top-level: real-time 640x480 video pipeline on Basys 3 + OV7670.
 //
-// YCbCr 4:2:2 encoding (Y3:Cb2:Cr2):
-//   - Luma buffer:   307,200 × 3 bits = 30 BRAMs
-//   - Chroma buffer: 153,600 × 4 bits = 20 BRAMs
-//   - Total: 50/50 BRAMs (100% utilization)
+// Data path:
+//   OV7670 (RGB565 @ pclk)
+//     -> cam_capture                  (RGB565 -> YCbCr 4:2:2, Y3+Cb2/Cr2)
+//     -> frame_buffer                 (split luma 30 BRAMs + chroma 20 BRAMs)
+//     -> filter_pipeline @ clk_25     (RAW / INVERT / COLOR_ISO / EDGE)
+//     -> VGA pins (RGB444)
 //
-// Connections:
-//   - clk_wiz_main: 100 MHz -> 25 MHz (VGA) and 24 MHz (camera XCLK)
-//   - cam_config: configures OV7670 via SCCB (58-entry ROM)
-//   - cam_capture: captures OV7670 pixel data, converts RGB565→YCbCr
-//   - frame_buffer: split luma + chroma dual-port BRAMs
-//   - filter_pipeline: reads luma+chroma, applies selected filter (@ clk_25)
-//   - vga_timing: generates HSYNC/VSYNC, active_video, rd_addr (@ clk_25)
-//   - debouncer: debounces switches and BTNC
-//   - cdc_pulse_sync: crosses VSYNC pulse from PCLK to clk_25 domain for LED
-//
-// LED diagnostic map:
-//   LD[15]    = cfg_done              (solid when camera config finished)
-//   LD[14]    = led_frame_toggle      (toggles each VSYNC = frame-rate indicator)
-//   LD[13:8]  = reg_writes_done[5:0] (counts to 58 during boot)
-//   LD[7:4]   = sw74                  (edge threshold passthrough)
-//   LD[3:2]   = sw32                  (color isolation channel passthrough)
-//   LD[1:0]   = sw_mode               (filter select indicator)
+// Clocks:
+//   clk_100 (board)  -> clk_wiz_main -> clk_25 (VGA pixel) and clk_24 (cam XCLK)
 //
 // Switch mapping:
-//   SW[1:0]  = sw_mode          filter select
-//   SW[3:2]  = sw32             color isolation channel
-//   SW[7:4]  = sw74             edge filter threshold
-//   SW[8]    = sw_test_pattern  OV7670 SCCB color-bar test mode
-//   SW[9]    = tp_enable        FPGA test-pattern bypass
-//   SW[15:10]= (unused, reserved for future)
+//   SW[1:0]  filter mode
+//   SW[3:2]  color isolation channel
+//   SW[7:4]  Sobel edge threshold
+//   SW[8]    OV7670 internal color-bar test pattern (SCCB writes)
+//   SW[9]    FPGA-side test pattern bypass (replaces camera writes)
+//   SW[15:10] reserved
+//
+// LED map:
+//   LD[15]    cfg_done
+//   LD[14]    led_frame_toggle (toggles each VSYNC)
+//   LD[13:8]  reg_writes_done[5:0]
+//   LD[7:4]   sw74 passthrough
+//   LD[3:2]   sw32 passthrough
+//   LD[1:0]   sw_mode passthrough
 
 module top #(
-    parameter DEBOUNCE_N    = 20,       // debounce counter width (override for sim)
-    parameter CAM_RST_HOLD  = 625000,   // cam_config RST_HOLD (override for sim)
-    parameter CAM_POST_RST  = 250000,   // cam_config POST_RST  (was 62500; now 10 ms)
-    parameter CAM_SOFT_WAIT = 750000,   // cam_config SOFT_RST_WAIT (was 62500; now 30 ms)
-    parameter CAM_REG_GAP   = 2500      // cam_config REG_GAP (~100 us between ROM writes)
+    parameter integer DEBOUNCE_N    = 20,
+    parameter integer CAM_RST_HOLD  = 625000,
+    parameter integer CAM_POST_RST  = 250000,
+    parameter integer CAM_SOFT_WAIT = 750000,
+    parameter integer CAM_REG_GAP   = 2500
 ) (
-    // Board clock
-    input  wire        clk_100,     // W5 — 100 MHz
+    input  wire        clk_100,
 
-    // VGA outputs
-    output wire        vga_hsync,   // P19
-    output wire        vga_vsync,   // R19
-    output wire [3:0]  vga_r,       // G19,H19,J19,N19
-    output wire [3:0]  vga_g,       // J17,H17,G17,D17
-    output wire [3:0]  vga_b,       // N18,L18,K18,J18
+    output wire        vga_hsync,
+    output wire        vga_vsync,
+    output wire [3:0]  vga_r,
+    output wire [3:0]  vga_g,
+    output wire [3:0]  vga_b,
 
-    // OV7670 camera
-    output wire        cam_xclk,    // C15 — 24 MHz clock to camera
-    output wire        cam_rst_n,   // P18 — camera reset (active low)
-    output wire        cam_pwdn,    // R18 — camera power down (keep 0)
-    output wire        cam_scl,     // A14 — SCCB clock
-    inout  wire        cam_sda,     // A15 — SCCB data (bi-dir open drain)
-    input  wire        cam_pclk,    // A16 — camera pixel clock
-    input  wire        cam_href,    // A17 — horizontal reference
-    input  wire        cam_vsync,   // B15 — vertical sync
-    input  wire [7:0]  cam_d,       // P17..B16 — pixel data
+    output wire        cam_xclk,
+    output wire        cam_rst_n,
+    output wire        cam_pwdn,
+    output wire        cam_scl,
+    inout  wire        cam_sda,
+    input  wire        cam_pclk,
+    input  wire        cam_href,
+    input  wire        cam_vsync,
+    input  wire [7:0]  cam_d,
 
-    // User I/O
-    input  wire [15:0] sw,          // slide switches
-    input  wire        btnc,        // center button (reset)
-    output wire [15:0] led          // LEDs
+    input  wire [15:0] sw,
+    input  wire        btnc,
+    output wire [15:0] led
 );
 
-    // -----------------------------------------------------------------------
-    // Clock generation
-    // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------
+    // Clocks
+    // -----------------------------------------------------------------
     wire clk_25, clk_24, mmcm_locked;
 
     clk_wiz_main u_clkwiz (
@@ -82,9 +71,9 @@ module top #(
 
     assign cam_xclk = clk_24;
 
-    // -----------------------------------------------------------------------
-    // Debouncer for switches and center button
-    // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------
+    // Debounce switches and center button (clk_25 domain)
+    // -----------------------------------------------------------------
     wire [15:0] sw_db;
     wire        btnc_db;
 
@@ -100,22 +89,17 @@ module top #(
         .sw_out (btnc_db)
     );
 
-    // System reset: MMCM not locked or button pressed
     wire sys_rst = btnc_db | ~mmcm_locked;
 
-    // -----------------------------------------------------------------------
-    // Switch mapping
-    // -----------------------------------------------------------------------
-    wire [1:0] sw_mode          = sw_db[1:0];    // SW[1:0]: filter select
-    wire [1:0] sw32             = sw_db[3:2];    // SW[3:2]: color isolation channel
-    wire [3:0] sw74             = sw_db[7:4];    // SW[7:4]: edge threshold
-    wire       sw_test_pattern  = sw_db[8];      // SW[8]:   OV7670 SCCB color-bar test mode
-    wire       tp_enable        = sw_db[9];      // SW[9]:   FPGA test-pattern bypass (diagnostic)
-    // SW[15:10]: unused (reserved)
+    wire [1:0] sw_mode         = sw_db[1:0];
+    wire [1:0] sw32            = sw_db[3:2];
+    wire [3:0] sw74            = sw_db[7:4];
+    wire       sw_test_pattern = sw_db[8];
+    wire       tp_enable       = sw_db[9];
 
-    // -----------------------------------------------------------------------
-    // Camera configuration (SCCB sequencer)
-    // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------
+    // Camera configuration (SCCB)
+    // -----------------------------------------------------------------
     wire        cfg_done;
     wire [6:0]  reg_writes_done;
     wire [6:0]  successful_xacts;
@@ -129,7 +113,6 @@ module top #(
     ) u_camcfg (
         .clk              (clk_25),
         .rst              (sys_rst),
-        .clk_div_run      (11'd125),
         .cam_rst_n        (cam_rst_n),
         .cam_pwdn         (cam_pwdn),
         .scl              (cam_scl),
@@ -140,15 +123,15 @@ module top #(
         .successful_xacts (successful_xacts)
     );
 
-    // -----------------------------------------------------------------------
-    // Camera capture (pclk domain) — RGB565 → YCbCr conversion
-    // -----------------------------------------------------------------------
-    wire [18:0] fb_wr_addr;
-    wire [2:0]  fb_wr_luma;
-    wire [3:0]  fb_wr_chroma;
-    wire        fb_wr_en;
-    wire        fb_wr_chroma_en;
-    wire        vsync_pulse_pclk;   // one-cycle pulse per frame @ PCLK
+    // -----------------------------------------------------------------
+    // Camera capture (cam_pclk domain) -> YCbCr 4:2:2
+    // -----------------------------------------------------------------
+    wire [18:0] cap_addr;
+    wire [2:0]  cap_luma;
+    wire [3:0]  cap_chroma;
+    wire        cap_we;
+    wire        cap_chroma_we;
+    wire        vsync_pulse_pclk;
 
     cam_capture #(
         .IMG_WIDTH  (640),
@@ -158,183 +141,166 @@ module top #(
         .d_in         (cam_d),
         .href         (cam_href),
         .vsync        (cam_vsync),
-        .wr_addr      (fb_wr_addr),
-        .wr_luma      (fb_wr_luma),
-        .wr_chroma    (fb_wr_chroma),
-        .wr_en        (fb_wr_en),
-        .wr_chroma_en (fb_wr_chroma_en),
+        .wr_addr      (cap_addr),
+        .wr_luma      (cap_luma),
+        .wr_chroma    (cap_chroma),
+        .wr_en        (cap_we),
+        .wr_chroma_en (cap_chroma_we),
         .vsync_pulse  (vsync_pulse_pclk)
     );
 
-    // -----------------------------------------------------------------------
-    // Test pattern injector (bypasses camera when SW[9] = 1)
-    // Generates YCbCr color bars: Red, Green, Blue vertical stripes.
-    //
-    // Chroma encoding: 0=strong deficit, 1=neutral, 2=moderate, 3=strong
-    //   RED:   Y=4, Cb=1(neutral), Cr=3(strong red)    → {Cb=01, Cr=11}
-    //   GREEN: Y=5, Cb=0(blue deficit), Cr=0(red deficit) → {Cb=00, Cr=00}
-    //   BLUE:  Y=2, Cb=3(strong blue), Cr=1(neutral)   → {Cb=11, Cr=01}
-    // -----------------------------------------------------------------------
-    reg  [9:0]  tp_col;
-    reg  [9:0]  tp_row;
-    reg  [18:0] tp_wr_addr;
-    reg  [2:0]  tp_wr_luma;
-    reg  [3:0]  tp_wr_chroma;
-    reg         tp_wr_en;
-    reg         tp_wr_chroma_en;
+    // -----------------------------------------------------------------
+    // FPGA-side test pattern (SW[9]) — three vertical color bars in YCbCr
+    //   Red   bar: Y=4, {Cb2=01 (mild blue deficit), Cr2=11 (strong red)}
+    //   Green bar: Y=5, {Cb2=00, Cr2=00}                        (both deficit)
+    //   Blue  bar: Y=2, {Cb2=11 (strong blue), Cr2=01 (mild)}
+    // -----------------------------------------------------------------
+    reg  [9:0]  tp_col, tp_row;
+    reg  [18:0] tp_addr;
+    reg  [2:0]  tp_luma;
+    reg  [3:0]  tp_chroma;
+    reg         tp_we, tp_chroma_we;
 
     always @(posedge cam_pclk) begin
         if (sys_rst) begin
             tp_col <= 10'd0;
             tp_row <= 10'd0;
+        end else if (tp_col == 10'd639) begin
+            tp_col <= 10'd0;
+            tp_row <= (tp_row == 10'd479) ? 10'd0 : tp_row + 10'd1;
         end else begin
-            if (tp_col == 10'd639) begin
-                tp_col <= 10'd0;
-                if (tp_row == 10'd479)
-                    tp_row <= 10'd0;
-                else
-                    tp_row <= tp_row + 10'd1;
-            end else begin
-                tp_col <= tp_col + 10'd1;
-            end
+            tp_col <= tp_col + 10'd1;
         end
     end
 
     always @(*) begin
-        tp_wr_addr = tp_row * 19'd640 + {9'd0, tp_col};
-        tp_wr_chroma_en = ~tp_col[0]; // write chroma on even columns
-        tp_wr_en = 1'b1;
+        tp_addr      = tp_row * 19'd640 + {9'd0, tp_col};
+        tp_we        = 1'b1;
+        tp_chroma_we = ~tp_col[0];
 
         if (tp_col < 10'd213) begin
-            // RED bar: medium bright, strong red, neutral blue
-            tp_wr_luma   = 3'd4;
-            tp_wr_chroma = 4'b01_11;  // Cb=1(neutral), Cr=3(strong red)
+            tp_luma   = 3'd4;
+            tp_chroma = 4'b01_11;
         end else if (tp_col < 10'd426) begin
-            // GREEN bar: bright, both deficits = green
-            tp_wr_luma   = 3'd5;
-            tp_wr_chroma = 4'b00_00;  // Cb=0(blue deficit), Cr=0(red deficit)
+            tp_luma   = 3'd5;
+            tp_chroma = 4'b00_00;
         end else begin
-            // BLUE bar: darker, strong blue, neutral red
-            tp_wr_luma   = 3'd2;
-            tp_wr_chroma = 4'b11_01;  // Cb=3(strong blue), Cr=1(neutral)
+            tp_luma   = 3'd2;
+            tp_chroma = 4'b11_01;
         end
     end
 
-    // Mux: tp_enable=1 -> test pattern drives BRAM write port; =0 -> camera path
-    wire [18:0] fb_wr_addr_mux       = tp_enable ? tp_wr_addr       : fb_wr_addr;
-    wire [2:0]  fb_wr_luma_mux       = tp_enable ? tp_wr_luma       : fb_wr_luma;
-    wire [3:0]  fb_wr_chroma_mux     = tp_enable ? tp_wr_chroma     : fb_wr_chroma;
-    wire        fb_wr_en_mux         = tp_enable ? tp_wr_en         : fb_wr_en;
-    wire        fb_wr_chroma_en_mux  = tp_enable ? tp_wr_chroma_en  : fb_wr_chroma_en;
+    wire [18:0] fb_wr_addr      = tp_enable ? tp_addr      : cap_addr;
+    wire [2:0]  fb_wr_luma      = tp_enable ? tp_luma      : cap_luma;
+    wire [3:0]  fb_wr_chroma    = tp_enable ? tp_chroma    : cap_chroma;
+    wire        fb_wr_en        = tp_enable ? tp_we        : cap_we;
+    wire        fb_wr_chroma_en = tp_enable ? tp_chroma_we : cap_chroma_we;
 
-    // -----------------------------------------------------------------------
-    // Frame buffer (split luma + chroma dual-port BRAMs)
-    // wr_clk is always cam_pclk — no clock mux required.
-    // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------
+    // Frame buffer (write @ cam_pclk, read @ clk_25)
+    // -----------------------------------------------------------------
     wire [18:0] fb_rd_addr;
     wire [2:0]  fb_rd_luma;
     wire [3:0]  fb_rd_chroma;
 
     frame_buffer u_fb (
         .wr_clk       (cam_pclk),
-        .wr_en        (fb_wr_en_mux),
-        .wr_addr      (fb_wr_addr_mux),
-        .wr_luma      (fb_wr_luma_mux),
-        .wr_chroma    (fb_wr_chroma_mux),
-        .wr_chroma_en (fb_wr_chroma_en_mux),
+        .wr_en        (fb_wr_en),
+        .wr_addr      (fb_wr_addr),
+        .wr_luma      (fb_wr_luma),
+        .wr_chroma    (fb_wr_chroma),
+        .wr_chroma_en (fb_wr_chroma_en),
         .rd_clk       (clk_25),
         .rd_addr      (fb_rd_addr),
         .rd_luma      (fb_rd_luma),
         .rd_chroma    (fb_rd_chroma)
     );
 
-    // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------
     // VGA timing
-    // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------
     wire [9:0]  h_count, v_count;
     wire        active_video;
-    wire        h_edge, v_edge;
 
     vga_timing u_vga (
-        .clk         (clk_25),
-        .rst         (sys_rst),
-        .hsync       (vga_hsync),
-        .vsync       (vga_vsync),
-        .h_count     (h_count),
-        .v_count     (v_count),
-        .active_video(active_video),
-        .rd_addr     (fb_rd_addr)
+        .clk          (clk_25),
+        .rst          (sys_rst),
+        .hsync        (vga_hsync),
+        .vsync        (vga_vsync),
+        .h_count      (h_count),
+        .v_count      (v_count),
+        .active_video (active_video),
+        .rd_addr      (fb_rd_addr)
     );
 
-    assign h_edge = (h_count == 10'd0) | (h_count == 10'd639);
-    assign v_edge = (v_count < 10'd2) | (v_count >= 10'd479);
+    wire h_edge = (h_count == 10'd0) | (h_count >= 10'd638);
+    wire v_edge = (v_count <  10'd2) | (v_count >= 10'd479);
 
-    // -----------------------------------------------------------------------
-    // Filter pipeline (YCbCr input, RGB444 output)
-    // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------
+    // Filter pipeline
+    // -----------------------------------------------------------------
     wire [11:0] filter_out;
 
     filter_pipeline #(.WIDTH(640)) u_filt (
-        .clk       (clk_25),
-        .rst       (sys_rst),
-        .fb_luma   (fb_rd_luma),
-        .fb_chroma (fb_rd_chroma),
-        .h_count   (h_count),
-        .v_count   (v_count),
-        .pix_valid (active_video),
-        .sw_mode   (sw_mode),
-        .sw32      (sw32),
-        .sw74      (sw74),
-        .h_edge    (h_edge),
-        .v_edge    (v_edge),
-        .rgb444_out(filter_out)
+        .clk        (clk_25),
+        .rst        (sys_rst),
+        .fb_luma    (fb_rd_luma),
+        .fb_chroma  (fb_rd_chroma),
+        .h_count    (h_count),
+        .v_count    (v_count),
+        .pix_valid  (active_video),
+        .sw_mode    (sw_mode),
+        .sw32       (sw32),
+        .sw74       (sw74),
+        .h_edge     (h_edge),
+        .v_edge     (v_edge),
+        .rgb444_out (filter_out)
     );
 
-    // -----------------------------------------------------------------------
-    // VGA RGB output (gate with active_video, 1-cycle delayed to match pipeline)
-    // -----------------------------------------------------------------------
-    reg active_video_d;
-    always @(posedge clk_25) active_video_d <= active_video;
+    // -----------------------------------------------------------------
+    // VGA output gating
+    // Pipeline depth from h_count to filter_out:
+    //   vga_timing rd_addr reg (1) + frame_buffer BRAM (1) + filter_pipeline (2) = 4
+    // Delay active_video by 4 cycles to gate output cleanly.
+    // -----------------------------------------------------------------
+    reg [3:0] active_pipe;
+    always @(posedge clk_25) begin
+        if (sys_rst) active_pipe <= 4'd0;
+        else         active_pipe <= {active_pipe[2:0], active_video};
+    end
+    wire active_d = active_pipe[3];
 
-    assign vga_r = active_video_d ? filter_out[11:8] : 4'h0;
-    assign vga_g = active_video_d ? filter_out[7:4]  : 4'h0;
-    assign vga_b = active_video_d ? filter_out[3:0]  : 4'h0;
+    assign vga_r = active_d ? filter_out[11:8] : 4'h0;
+    assign vga_g = active_d ? filter_out[7:4]  : 4'h0;
+    assign vga_b = active_d ? filter_out[3:0]  : 4'h0;
 
-    // -----------------------------------------------------------------------
-    // CDC: VSYNC pulse from PCLK domain -> clk_25 domain (for LED toggle)
-    // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------
+    // VSYNC pulse CDC: cam_pclk -> clk_25, drives a frame-rate LED
+    // -----------------------------------------------------------------
     wire vsync_pulse_25;
 
     cdc_pulse_sync u_cdc (
-        .clk_src    (cam_pclk),
-        .clk_dst    (clk_25),
-        .rst_src    (1'b0),
-        .rst_dst    (sys_rst),
-        .pulse_in   (vsync_pulse_pclk),
-        .pulse_out  (vsync_pulse_25)
+        .clk_src   (cam_pclk),
+        .clk_dst   (clk_25),
+        .rst_src   (1'b0),
+        .rst_dst   (sys_rst),
+        .pulse_in  (vsync_pulse_pclk),
+        .pulse_out (vsync_pulse_25)
     );
 
-    // LED frame counter: toggles each VSYNC
     reg led_frame_toggle;
     always @(posedge clk_25) begin
-        if (sys_rst)
-            led_frame_toggle <= 1'b0;
-        else if (vsync_pulse_25)
-            led_frame_toggle <= ~led_frame_toggle;
+        if (sys_rst)             led_frame_toggle <= 1'b0;
+        else if (vsync_pulse_25) led_frame_toggle <= ~led_frame_toggle;
     end
 
-    // -----------------------------------------------------------------------
-    // LED outputs
-    //   LD[15]    = cfg_done
-    //   LD[14]    = led_frame_toggle
-    //   LD[13:8]  = reg_writes_done[5:0]
-    //   LD[7:4]   = sw74
-    //   LD[3:2]   = sw32
-    //   LD[1:0]   = sw_mode
-    // -----------------------------------------------------------------------
+    /* verilator lint_off UNUSED */
+    wire _unused_xacts = &{1'b0, successful_xacts};
+    /* verilator lint_on UNUSED */
+
     assign led[15]   = cfg_done;
     assign led[14]   = led_frame_toggle;
-    assign led[13:8] = reg_writes_done;
+    assign led[13:8] = reg_writes_done[5:0];
     assign led[7:4]  = sw74;
     assign led[3:2]  = sw32;
     assign led[1:0]  = sw_mode;

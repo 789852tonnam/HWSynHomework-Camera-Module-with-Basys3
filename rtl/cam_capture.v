@@ -1,27 +1,22 @@
 `timescale 1ns/1ps
-// cam_capture.v
-// Captures OV7670 camera data and converts RGB565 to YCbCr 4:2:2.
+// OV7670 RGB565 capture and YCbCr 4:2:2 quantization (Y3 + Cb2/Cr2).
 //
-// Ported from ov7670_capture.v in the uec2_projekt reference design.
+// Camera signals are sampled on the falling edge of PCLK (data is stable in
+// the middle of the high half per the OV7670 datasheet timing diagram).
+// On each href-active line two PCLK cycles assemble one RGB565 pixel; we_reg
+// pulses one cycle after the second byte arrives. Address resets on VSYNC.
 //
-// Key design change: Camera signals (d, href, vsync) are sampled on the
-// FALLING edge of PCLK. The OV7670 datasheet (Figure 5) shows data
-// stable in the middle of the PCLK high period.
+// Color math (BT.601 luma + signed-difference chroma):
+//   Y8  = (77*R8 + 150*G8 + 29*B8) >> 8                    (~0.299 R + 0.587 G + 0.114 B)
+//   Cb2 = quantize(B8 - Y8) into 4 bins symmetric around 0
+//   Cr2 = quantize(R8 - Y8) into 4 bins symmetric around 0
 //
-// Pixel format: OV7670 sends 2 bytes per pixel in RGB565:
-//   Byte 0 (first PCLK with href=1): bits [15:8] of RGB565
-//   Byte 1 (second PCLK with href=1): bits [7:0]  of RGB565
-//
-// YCbCr conversion (shift-add approximation):
-//   Y  = (R5 + G5 + B5) / 4,   truncated to 3 bits (0..7)
-//   Cb = (B5 - Y_full) / 8 + 2, clamped to 2 bits (0..3)
-//   Cr = (R5 - Y_full) / 8 + 2, clamped to 2 bits (0..3)
-//
-// Chroma is written once per pixel pair (even-column pixels).
-//
-// Parameters:
-//   IMG_WIDTH  — pixels per line (default 640)
-//   IMG_HEIGHT — lines per frame (default 480)
+// Chroma bin layout (signed difference d in 8-bit-equivalent units):
+//   d >= +48   -> 3  (strong)
+//   d >= +16   -> 2  (mild)
+//   d >= -16   -> 1  (mild deficit)
+//   else       -> 0  (strong deficit)
+// The decoder in ycbcr_to_rgb444 maps each bin back to a small signed offset.
 
 module cam_capture #(
     parameter IMG_WIDTH  = 640,
@@ -34,163 +29,132 @@ module cam_capture #(
     input  wire        vsync,
 
     output reg  [18:0] wr_addr,
-    output reg  [2:0]  wr_luma,       // Y (3 bits)
-    output reg  [3:0]  wr_chroma,     // {Cb[1:0], Cr[1:0]}
+    output reg  [2:0]  wr_luma,
+    output reg  [3:0]  wr_chroma,
     output reg         wr_en,
-    output reg         wr_chroma_en,  // high on even columns
+    output reg         wr_chroma_en,
     output reg         vsync_pulse
 );
 
-    // -----------------------------------------------------------------------
-    // Negedge latches (camera signals sampled at stable point)
-    // -----------------------------------------------------------------------
-    reg [7:0]  latched_d;
-    reg        latched_href;
-    reg        latched_vsync;
+    // Avoid synth warnings on unused params (kept for top-level documentation)
+    /* verilator lint_off UNUSED */
+    wire _unused = &{1'b0, IMG_WIDTH[0], IMG_HEIGHT[0]};
+    /* verilator lint_on UNUSED */
 
-    // -----------------------------------------------------------------------
-    // Posedge state
-    // -----------------------------------------------------------------------
-    reg [15:0] d_latch;
-    reg [6:0]  href_last;
-    reg        href_hold;
-    reg [18:0] address;
-    reg        we_reg;
+    // -----------------------------------------------------------------
+    // Negedge latches: sample camera bus at stable point
+    // -----------------------------------------------------------------
+    reg [7:0] latched_d;
+    reg       latched_href, latched_vsync;
 
-    // Track even/odd pixel columns for chroma write gating
-    reg        col_phase;   // 0 = even column, 1 = odd column
-
-    // -----------------------------------------------------------------------
-    // Initial blocks — X-prop avoidance (critical for simulation correctness)
-    // -----------------------------------------------------------------------
     initial begin
         latched_d     = 8'd0;
         latched_href  = 1'b0;
         latched_vsync = 1'b0;
-        d_latch       = 16'd0;
-        href_last     = 7'd0;
-        href_hold     = 1'b0;
-        address       = 19'd0;
-        we_reg        = 1'b0;
-        wr_addr       = 19'd0;
-        wr_luma       = 3'd0;
-        wr_chroma     = 4'd0;
-        wr_en         = 1'b0;
-        wr_chroma_en  = 1'b0;
-        vsync_pulse   = 1'b0;
-        col_phase     = 1'b0;
     end
 
-    // -----------------------------------------------------------------------
-    // Negedge: latch camera inputs
-    // -----------------------------------------------------------------------
     always @(negedge pclk_in) begin
         latched_d     <= d_in;
         latched_href  <= href;
         latched_vsync <= vsync;
     end
 
-    // -----------------------------------------------------------------------
-    // Posedge: pixel accumulation and write-enable generation
-    // Matches the reference's we_reg/href_last/d_latch/address logic exactly.
-    // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------
+    // Posedge: byte pairing, address counter, vsync detection
+    // -----------------------------------------------------------------
+    reg [15:0] d_latch;
+    reg [6:0]  href_last;
+    reg [18:0] address;
+    reg        we_reg;
+    reg        col_phase;     // toggles each pixel; 0 = even column
+
+    initial begin
+        d_latch       = 16'd0;
+        href_last     = 7'd0;
+        address       = 19'd0;
+        we_reg        = 1'b0;
+        col_phase     = 1'b0;
+        wr_addr       = 19'd0;
+        wr_luma       = 3'd0;
+        wr_chroma     = 4'd0;
+        wr_en         = 1'b0;
+        wr_chroma_en  = 1'b0;
+        vsync_pulse   = 1'b0;
+    end
+
     always @(posedge pclk_in) begin
         vsync_pulse <= 1'b0;
-        we_reg      <= 1'b0;   // default: clear
+        we_reg      <= 1'b0;
 
-        // Address advance: when we_reg was high last cycle
+        // Address advances on the cycle after each completed pixel
         if (we_reg) begin
             address   <= address + 19'd1;
-            col_phase <= ~col_phase;    // toggle even/odd
+            col_phase <= ~col_phase;
         end
 
-        // Byte accumulation
-        if (latched_href == 1'b1)
+        // Shift in pixel bytes while line is active
+        if (latched_href)
             d_latch <= {d_latch[7:0], latched_d};
 
-        href_hold <= latched_href;
-
-        if (latched_vsync == 1'b1) begin
+        if (latched_vsync) begin
             address     <= 19'd0;
             href_last   <= 7'd0;
             vsync_pulse <= 1'b1;
-            col_phase   <= 1'b0;        // reset to even on new frame
+            col_phase   <= 1'b0;
+        end else if (href_last[0]) begin
+            we_reg    <= 1'b1;     // second byte just arrived -> pixel complete
+            href_last <= 7'd0;
         end else begin
-            if (href_last[0] == 1'b1) begin
-                we_reg    <= 1'b1;   // signal: complete pixel ready
-                href_last <= 7'd0;
-            end else begin
-                href_last <= {href_last[5:0], latched_href};
-            end
+            href_last <= {href_last[5:0], latched_href};
         end
     end
 
-    // -----------------------------------------------------------------------
-    // RGB565 channel extraction from d_latch
-    //   r5 = bits [15:11] (5-bit red,   0..31)
-    //   g6 = bits [10:5]  (6-bit green, 0..63)
-    //   b5 = bits [4:0]   (5-bit blue,  0..31)
-    // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------
+    // RGB565 -> RGB888 (replicate top bits to fill — gives clean 0..255)
+    // -----------------------------------------------------------------
     wire [4:0] r5 = d_latch[15:11];
-    wire [5:0] g6 = {d_latch[10:8], d_latch[7:5]};
+    wire [5:0] g6 = d_latch[10:5];
     wire [4:0] b5 = d_latch[4:0];
 
-    // -----------------------------------------------------------------------
-    // RGB565 → YCbCr conversion
-    //
-    // Luminance: Y = (R + G + B) / 3
-    //   Approximation: (rgb_sum * 11) >> 5  (11/32 ≈ 1/3)
-    //
-    // Chrominance: simple threshold comparison (no signed arithmetic)
-    //   Compare each channel against Y directly.
-    //   Encoding (center = 1 = neutral):
-    //     0 = channel is MUCH LESS than Y  (diff < -3)
-    //     1 = channel is NEAR Y            (neutral, -3 <= diff < +3)
-    //     2 = channel is SOMEWHAT MORE     (+3 <= diff < +8)
-    //     3 = channel is MUCH MORE than Y  (diff >= +8)
-    // -----------------------------------------------------------------------
-    wire [4:0] g5 = g6[5:1];
+    wire [7:0] r8 = {r5, r5[4:2]};
+    wire [7:0] g8 = {g6, g6[5:4]};
+    wire [7:0] b8 = {b5, b5[4:2]};
 
-    // Sum for luminance (max 31+31+31 = 93, fits in 7 bits)
-    wire [6:0] rgb_sum = {2'b0, r5} + {2'b0, g5} + {2'b0, b5};
+    // -----------------------------------------------------------------
+    // BT.601 luma:  Y = (77 R + 150 G + 29 B) / 256
+    // Max = 256 * 255 = 65280 -> 16-bit accumulator
+    // -----------------------------------------------------------------
+    wire [15:0] y_acc = {8'd0, r8} * 16'd77
+                      + {8'd0, g8} * 16'd150
+                      + {8'd0, b8} * 16'd29;
+    wire [7:0]  y8 = y_acc[15:8];
+    wire [2:0]  y3 = y8[7:5];
 
-    // Y = rgb_sum / 3 ≈ (rgb_sum * 11) >> 5
-    wire [10:0] rgb_sum_x11 = {rgb_sum, 3'b0} + {rgb_sum, 1'b0} + {4'b0, rgb_sum};
-    wire [4:0]  y_full = rgb_sum_x11[9:5];   // range 0..31
+    // -----------------------------------------------------------------
+    // Chroma: signed B-Y and R-Y, quantized into 4 symmetric bins
+    // -----------------------------------------------------------------
+    wire signed [9:0] y_s    = $signed({2'b0, y8});
+    wire signed [9:0] b_s    = $signed({2'b0, b8});
+    wire signed [9:0] r_s    = $signed({2'b0, r8});
+    wire signed [9:0] diff_b = b_s - y_s;
+    wire signed [9:0] diff_r = r_s - y_s;
 
-    // 3-bit stored luma: Y / 4 (range 0..7)
-    wire [2:0] y_3bit = y_full[4:2];
+    wire [1:0] cb2 = (diff_b >=  10'sd48) ? 2'd3 :
+                     (diff_b >=  10'sd16) ? 2'd2 :
+                     (diff_b >= -10'sd16) ? 2'd1 : 2'd0;
 
-    // Chrominance quantization using unsigned comparisons only.
-    // For neutral colors (R=G=B): b5 ≈ y_full, so Cb=1 (neutral). Same for Cr.
-    // Thresholds chosen so the neutral dead zone is [-3, +3).
-    // Signed-difference chroma — fixes white=yellow at high brightness
-    wire [5:0] b5_ext   = {1'b0, b5};
-    wire [5:0] r5_ext   = {1'b0, r5};
-    wire [5:0] y_ext    = {1'b0, y_full};
-    wire [5:0] b_above  = (b5_ext > y_ext) ? (b5_ext - y_ext) : 6'd0;
-    wire [5:0] b_below  = (y_ext > b5_ext) ? (y_ext - b5_ext) : 6'd0;
-    wire [5:0] r_above  = (r5_ext > y_ext) ? (r5_ext - y_ext) : 6'd0;
-    wire [5:0] r_below  = (y_ext > r5_ext) ? (y_ext - r5_ext) : 6'd0;
+    wire [1:0] cr2 = (diff_r >=  10'sd48) ? 2'd3 :
+                     (diff_r >=  10'sd16) ? 2'd2 :
+                     (diff_r >= -10'sd16) ? 2'd1 : 2'd0;
 
-    wire [1:0] cb_2bit = (b_above >= 6'd8) ? 2'd3 :
-                         (b_above >= 6'd3) ? 2'd2 :
-                         (b_below < 6'd4)  ? 2'd1 :
-                                             2'd0;
-
-    wire [1:0] cr_2bit = (r_above >= 6'd8) ? 2'd3 :
-                         (r_above >= 6'd3) ? 2'd2 :
-                         (r_below < 6'd4)  ? 2'd1 :
-                                             2'd0;
-
-    // -----------------------------------------------------------------------
-    // Posedge: registered outputs (wr_en, wr_luma, wr_chroma, wr_addr)
-    // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------
+    // Registered outputs
+    // -----------------------------------------------------------------
     always @(posedge pclk_in) begin
         wr_en        <= we_reg;
-        wr_luma      <= y_3bit;
-        wr_chroma    <= {cb_2bit, cr_2bit};
-        wr_chroma_en <= ~col_phase;   // write chroma on even columns (col_phase=0)
+        wr_luma      <= y3;
+        wr_chroma    <= {cb2, cr2};
+        wr_chroma_en <= ~col_phase;     // chroma writes on even columns
         wr_addr      <= address;
     end
 

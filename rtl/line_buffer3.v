@@ -1,117 +1,99 @@
 `timescale 1ns/1ps
-// line_buffer3.v
-// 3-line circular shift buffer for 3×3 Sobel neighbourhood.
+// 3-line circular shift buffer for a 3x3 Sobel neighbourhood (luma only).
 //
-// Stores the last 3 rows of LUMA values from the frame buffer.
-// Uses 3 RAM arrays of 640 × 3 bits indexed by column.
-// Uses distributed RAM (LUTs) since all BRAM is consumed by the
-// frame buffer. Cost: ~140 LUTs out of 20,800 available.
-// On each pixel clock:
-//   - Current pixel is written into the "write" line.
-//   - The three output lines (top, mid, bot) are the three RAM lines
-//     rotationally indexed by (row mod 3).
-// Left/right edge pixels (col=0 and col=639) cause the 3×3 window to
-// be zero-padded at the caller level (filter_edge checks h_count/v_count).
+// Three WIDTH x 3-bit distributed RAMs hold rows N-2, N-1, N (current).
+// Spatial labels follow image convention:
+//   top  = row above center  = row N-2  (oldest complete)
+//   mid  = center row        = row N-1  (most recent complete)
+//   bot  = row below center  = row N    (currently being written)
 //
-// Parameters:
-//   WIDTH  - line width in pixels (default 640)
+// The Sobel pixel under test is (row N-1, col h-1). The 3x3 window samples
+// columns (h-2, h-1, h) of the three rows; col_r = h_count and col_l/c are
+// h_count clamped on subtraction. The window output appears 1 cycle after
+// the addresses are presented (registered read).
+//
+// HAZARD HANDLING:
+// Reading bot_r from lb[bot_idx][h_count] would return the value present
+// BEFORE this cycle's write (row N-3 leftover from the previous frame). To
+// get the just-arrived pixel we forward pix_in into bot_r directly, since
+// col_r is always equal to h_count in this design. bot_l and bot_c read
+// columns h-2 and h-1 which were written 2 and 1 cycles ago respectively
+// and are already committed.
+//
+// Display offset: the Sobel center at col h-1 emerges at VGA column h+1
+// (after the filter_pipeline output register), giving a ~2-pixel rightward
+// and 1-row downward shift in edge mode. Invisible at 640x480.
 
 module line_buffer3 #(
-    parameter WIDTH = 640
+    parameter integer WIDTH = 640
 ) (
     input  wire        clk,
     input  wire        rst,
 
-    // Pixel input
-    input  wire [2:0]  pix_in,         // current pixel luma (Y, 3 bits)
-    input  wire        pix_valid,      // write enable (high during active video)
+    input  wire [2:0]  pix_in,
+    input  wire        pix_valid,
+    input  wire [9:0]  h_count,
+    input  wire [9:0]  v_count,
 
-    // Position
-    input  wire [9:0]  h_count,        // 0..WIDTH-1
-    input  wire [9:0]  v_count,        // 0..479
-
-    // 3×3 neighbourhood outputs (top=2 rows back, mid=1 row back, bot=current)
-    // Columns: _l = col-1 (left), _c = col (centre), _r = col+1 (right)
     output reg  [2:0]  top_l, top_c, top_r,
     output reg  [2:0]  mid_l, mid_c, mid_r,
     output reg  [2:0]  bot_l, bot_c, bot_r
 );
 
-    // Three line buffers — distributed RAM (LUTs) since all BRAM is
-    // consumed by the frame buffer. 3 × 640 × 3 bits ≈ 140 LUTs.
+    /* verilator lint_off UNUSED */
+    wire _unused = &{1'b0, v_count};
+    /* verilator lint_on UNUSED */
+
     (* ram_style = "distributed" *)
     reg [2:0] lb [0:2][0:WIDTH-1];
 
-    // Initialize memory to zero (simulation safety; synthesis ignores initial)
-    integer _ii, _jj;
+    integer i, j;
     initial begin
-        for (_ii = 0; _ii < 3; _ii = _ii + 1)
-            for (_jj = 0; _jj < WIDTH; _jj = _jj + 1)
-                lb[_ii][_jj] = 3'b0;
+        for (i = 0; i < 3; i = i + 1)
+            for (j = 0; j < WIDTH; j = j + 1)
+                lb[i][j] = 3'd0;
     end
 
-    // wr_idx: which physical buffer is currently being WRITTEN.
-    // Advances at the end of each line (last pixel of row).
-    // After row N finishes, wr_idx points to where row N+1 will go.
-    //
-    // Read indices are derived from wr_idx to reflect the most recently
-    // completed rows:
-    //   rd_bot = (wr_idx + 2) % 3  → buffer written two advances ago (row N)
-    //   rd_mid = (wr_idx + 1) % 3  → buffer written one advance ago  (row N-1)
-    //   rd_top = wr_idx % 3        → buffer next in queue             (row N-2)
-    reg [1:0] wr_idx;    // 0, 1, or 2
+    // wr_idx = which buffer is currently being written this row (= bot row).
+    reg [1:0] wr_idx;
+    initial wr_idx = 2'd0;
 
-    // rd_bot = (wr_idx + 2) % 3   most recently completed row
-    // rd_mid = (wr_idx + 1) % 3   one row older
-    // rd_top = wr_idx % 3         two rows older (oldest of the three)
-    wire [1:0] rd_bot_idx = (wr_idx == 2'd0) ? 2'd2 :
-                            (wr_idx == 2'd1) ? 2'd0 : 2'd1;
-    wire [1:0] rd_mid_idx = (wr_idx == 2'd0) ? 2'd1 :
-                            (wr_idx == 2'd1) ? 2'd2 : 2'd0;
-    wire [1:0] rd_top_idx = wr_idx;
+    wire [1:0] top_idx = (wr_idx == 2'd2) ? 2'd0 : wr_idx + 2'd1;   // (wr+1) %3
+    wire [1:0] mid_idx = (wr_idx == 2'd0) ? 2'd2 : wr_idx - 2'd1;   // (wr-1) %3
+    wire [1:0] bot_idx = wr_idx;
 
-    // -----------------------------------------------------------------------
-    // Write: store current pixel into the current write buffer
-    // -----------------------------------------------------------------------
+    // ----- Write current pixel into bot buffer -----
     always @(posedge clk) begin
-        if (pix_valid) begin
+        if (pix_valid)
             lb[wr_idx][h_count] <= pix_in;
-        end
     end
 
-    // Advance wr_idx at the end of each line (last pixel clocked in)
+    // ----- Advance wr_idx at end-of-line -----
     always @(posedge clk) begin
-        if (rst) begin
+        if (rst)
             wr_idx <= 2'd0;
-        end else if (pix_valid && h_count == WIDTH - 1) begin
+        else if (pix_valid && h_count == WIDTH - 1)
             wr_idx <= (wr_idx == 2'd2) ? 2'd0 : wr_idx + 2'd1;
-        end
     end
 
-    // -----------------------------------------------------------------------
-    // Read: latch 3×3 neighbourhood (registered — 1-cycle read latency)
-    // Left  column: h_count > 0       ? h_count-1 : 0
-    // Centre column: h_count
-    // Right column: h_count < WIDTH-1 ? h_count+1 : WIDTH-1
-    // Edge zeroing is left to filter_edge.
-    // -----------------------------------------------------------------------
-    wire [9:0] col_l = (h_count > 0)          ? h_count - 10'd1 : 10'd0;
-    wire [9:0] col_c = h_count;
-    wire [9:0] col_r = (h_count < WIDTH - 1)  ? h_count + 10'd1 : (WIDTH - 1);
+    // ----- Window column indices (window spans h-2, h-1, h) -----
+    wire [9:0] col_l = (h_count >= 10'd2) ? h_count - 10'd2 : 10'd0;
+    wire [9:0] col_c = (h_count >= 10'd1) ? h_count - 10'd1 : 10'd0;
+    wire [9:0] col_r = h_count;
 
+    // ----- Registered window outputs -----
+    // top, mid: read from completed buffers (no hazard).
+    // bot:      read cols h-2 and h-1 normally; forward pix_in into bot_r.
     always @(posedge clk) begin
-        // Top row (2 rows back)
-        top_l <= lb[rd_top_idx][col_l];
-        top_c <= lb[rd_top_idx][col_c];
-        top_r <= lb[rd_top_idx][col_r];
-        // Middle row (1 row back)
-        mid_l <= lb[rd_mid_idx][col_l];
-        mid_c <= lb[rd_mid_idx][col_c];
-        mid_r <= lb[rd_mid_idx][col_r];
-        // Bottom row (most recently completed row)
-        bot_l <= lb[rd_bot_idx][col_l];
-        bot_c <= lb[rd_bot_idx][col_c];
-        bot_r <= lb[rd_bot_idx][col_r];
+        top_l <= lb[top_idx][col_l];
+        top_c <= lb[top_idx][col_c];
+        top_r <= lb[top_idx][col_r];
+        mid_l <= lb[mid_idx][col_l];
+        mid_c <= lb[mid_idx][col_c];
+        mid_r <= lb[mid_idx][col_r];
+        bot_l <= lb[bot_idx][col_l];
+        bot_c <= lb[bot_idx][col_c];
+        bot_r <= pix_in;                  // col_r == h_count, forward to avoid hazard
     end
 
 endmodule

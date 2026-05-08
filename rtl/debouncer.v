@@ -1,8 +1,6 @@
 `timescale 1ns/1ps
-// debouncer.v
-// Generic debouncer for W-bit input.
-// Each bit uses a N-bit counter; output only changes after input is
-// stable for 2^N cycles (~10 ms at 100 MHz with N=20).
+// W-bit debouncer with two-flop synchronizer + N-bit stability counter.
+// Output bit transitions only after the synchronized input is stable for 2^N clocks.
 
 module debouncer #(
     parameter W = 16,
@@ -13,38 +11,34 @@ module debouncer #(
     output reg  [W-1:0]   sw_out
 );
 
+    initial sw_out = {W{1'b0}};
+
     genvar i;
     generate
-        for (i = 0; i < W; i = i + 1) begin : gen_deb
+        for (i = 0; i < W; i = i + 1) begin : g_bit
             reg [N-1:0] cnt;
-            reg         sync0, sync1;
+            reg         s0, s1;
 
-            // Initialise to known values in simulation
             initial begin
-                cnt   = {N{1'b0}};
-                sync0 = 1'b0;
-                sync1 = 1'b0;
+                cnt = {N{1'b0}};
+                s0  = 1'b0;
+                s1  = 1'b0;
             end
 
             always @(posedge clk) begin
-                // Two-flop synchronizer to bring async input on-chip
-                sync0 <= sw_in[i];
-                sync1 <= sync0;
+                s0 <= sw_in[i];
+                s1 <= s0;
 
-                if (sync1 == sw_out[i]) begin
+                if (s1 == sw_out[i]) begin
                     cnt <= {N{1'b0}};
+                end else if (&cnt) begin
+                    sw_out[i] <= s1;
+                    cnt       <= {N{1'b0}};
                 end else begin
                     cnt <= cnt + 1'b1;
-                    if (cnt == {N{1'b1}}) begin
-                        sw_out[i] <= sync1;
-                        cnt        <= {N{1'b0}};
-                    end
                 end
             end
         end
     endgenerate
-
-    // Initialise outputs (synthesis will treat as reset-less FF initial value)
-    initial sw_out = {W{1'b0}};
 
 endmodule
