@@ -1,0 +1,26 @@
+# Synthesis and Simulation outputs
+*.done
+*.jdi
+*.pin
+*.qmsg
+*.summary
+*.sld
+*.bak
+*.log
+*.rpt
+*.vcd
+*.swp
+
+# Quartus specific
+db/
+incremental_db/
+output_files/
+greybox_tmp/
+hc_output/
+
+# Vivado specific
+*.jou
+*.log
+.Xil/
+vivado*.str
+vivado*.jou
