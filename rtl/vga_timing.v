@@ -5,10 +5,10 @@
 // V: active=480, FP=10, sync=2,  BP=29 -> total 521
 // HSYNC and VSYNC are active-LOW.
 //
-// rd_addr is combinational (base_of_row + h_count) using a running line base
-// accumulator (no per-pixel multiplication). The frame buffer adds 1 cycle
-// of BRAM read latency, so the caller should delay active_video to match the
-// downstream pipeline when gating VGA output.
+// rd_addr is generated combinationally (base_of_row + h_count) so the
+// consumer (frame buffer BRAM) sees the address one cycle before active_video.
+// Pipeline depth: comb(0) + BRAM(1) + filter_pipeline(2) = 3 cycles.
+// Caller should delay active_video by 3 cycles when gating VGA output.
 
 module vga_timing (
     input  wire        clk,
@@ -82,6 +82,8 @@ module vga_timing (
         end
     end
 
+    // Combinational rd_addr — matches the 320 version's frame_addr approach.
+    // BRAM sees address 1 cycle before data is consumed; no registered stage needed.
     wire in_active = (h_count < H_ACTIVE) && (v_count < V_ACTIVE);
     assign rd_addr = in_active ? (line_base + {9'd0, h_count}) : 19'd0;
 

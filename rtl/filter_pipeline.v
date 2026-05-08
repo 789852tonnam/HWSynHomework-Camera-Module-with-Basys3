@@ -8,10 +8,9 @@
 //   2'b11  EDGE      — 3x3 Sobel on luma (threshold = sw74)
 //
 // Pipeline depth (frame buffer output -> rgb444_out):
-//   raw / invert / iso : 0 (ycbcr comb)   + 1 cycle (output reg) = 1 cycle
-//   edge               : 1 (line_buffer3) + 1 cycle (output reg) = 2 cycles
-// Edge mode lags non-edge by 1 pixel; filter_edge already blanks the leftmost
-// columns via h_edge so the shift is invisible. Matches the 320 path style.
+//   raw / invert / iso : 1 cycle (latch raw_d) + 1 cycle (output reg) = 2 cycles
+//   edge               : 1 cycle (line_buffer3) + 1 cycle (output reg) = 2 cycles
+// Latencies are matched so mode switching doesn't introduce a horizontal shift.
 //
 // h_count / v_count are passed through for dither (raw) and edge gating (edge).
 
@@ -90,15 +89,25 @@ module filter_pipeline #(
     );
 
     // -----------------------------------------------------------------
-    // Mode select + output register (single pipeline stage)
+    // Latency-match register on non-edge paths (1 cycle, like line_buffer3)
+    // -----------------------------------------------------------------
+    reg [11:0] raw_d, inv_d, iso_d;
+    always @(posedge clk) begin
+        raw_d <= raw444;
+        inv_d <= inv444;
+        iso_d <= iso444;
+    end
+
+    // -----------------------------------------------------------------
+    // Mode select + output register
     // -----------------------------------------------------------------
     always @(posedge clk) begin
         if (rst) begin
             rgb444_out <= 12'h000;
         end else case (sw_mode)
-            2'b00:   rgb444_out <= raw444;
-            2'b01:   rgb444_out <= inv444;
-            2'b10:   rgb444_out <= iso444;
+            2'b00:   rgb444_out <= raw_d;
+            2'b01:   rgb444_out <= inv_d;
+            2'b10:   rgb444_out <= iso_d;
             default: rgb444_out <= edge444;
         endcase
     end

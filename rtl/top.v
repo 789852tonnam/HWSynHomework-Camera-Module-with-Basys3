@@ -179,14 +179,14 @@ module top #(
         tp_chroma_we = ~tp_col[0];
 
         if (tp_col < 10'd213) begin
-            tp_luma   = 3'd4;
-            tp_chroma = 4'b01_11;
+            tp_luma   = 3'd5;        // Red: strong Cr, strong B deficit
+            tp_chroma = 4'b00_11;    // Cb=00 (strong B deficit), Cr=11 (strong R)
         end else if (tp_col < 10'd426) begin
-            tp_luma   = 3'd5;
-            tp_chroma = 4'b00_00;
+            tp_luma   = 3'd5;        // Green: both strong deficit -> G wins
+            tp_chroma = 4'b00_00;    // Cb=00, Cr=00
         end else begin
-            tp_luma   = 3'd2;
-            tp_chroma = 4'b11_01;
+            tp_luma   = 3'd5;        // Blue: strong Cb, strong R deficit
+            tp_chroma = 4'b11_00;    // Cb=11 (strong B), Cr=00 (strong R deficit)
         end
     end
 
@@ -260,16 +260,15 @@ module top #(
     // -----------------------------------------------------------------
     // VGA output gating
     // Pipeline depth from h_count to filter_out:
-    //   vga_timing rd_addr (comb) + frame_buffer BRAM (1) + filter_pipeline (1) = 2
-    // Delay active_video by 2 cycles. Edge mode is 1 cycle deeper but its
-    // leftmost-column gating in filter_edge handles the extra pixel.
+    //   rd_addr comb (0) + frame_buffer BRAM (1) + filter_pipeline (2) = 3
+    // Delay active_video by 3 cycles to gate output cleanly.
     // -----------------------------------------------------------------
-    reg [1:0] active_pipe;
+    reg [2:0] active_pipe;
     always @(posedge clk_25) begin
-        if (sys_rst) active_pipe <= 2'd0;
-        else         active_pipe <= {active_pipe[0], active_video};
+        if (sys_rst) active_pipe <= 3'd0;
+        else         active_pipe <= {active_pipe[1:0], active_video};
     end
-    wire active_d = active_pipe[1];
+    wire active_d = active_pipe[2];
 
     assign vga_r = active_d ? filter_out[11:8] : 4'h0;
     assign vga_g = active_d ? filter_out[7:4]  : 4'h0;
