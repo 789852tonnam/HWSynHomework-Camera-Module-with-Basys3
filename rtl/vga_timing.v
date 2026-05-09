@@ -5,10 +5,11 @@
 // V: active=480, FP=10, sync=2,  BP=29 -> total 521
 // HSYNC and VSYNC are active-LOW.
 //
-// rd_addr is generated combinationally (base_of_row + h_count) so the
-// consumer (frame buffer BRAM) sees the address one cycle before active_video.
-// Pipeline depth: comb(0) + BRAM(1) + filter_pipeline(2) = 3 cycles.
-// Caller should delay active_video by 3 cycles when gating VGA output.
+// rd_addr is combinational. Pipeline: comb(0)+BRAM(1)+filter(2) = 3 cycles.
+// Pre-fetch starts 3 cycles early (last 3 H-blanking clocks) so pixel[0]
+// arrives exactly when active_d goes high at col 0. No right shift.
+//
+// line_base counts DOWN (479*640 -> 0) to correct upside-down camera output.
 
 module vga_timing (
     input  wire        clk,
@@ -38,6 +39,9 @@ module vga_timing (
     localparam V_SYNC_START = V_ACTIVE + V_FP;             // 490
     localparam V_SYNC_END   = V_ACTIVE + V_FP + V_SYNC;    // 492
 
+    // Pipeline pre-fetch depth
+    localparam PIPE = 10'd3;
+
     initial begin
         h_count = 10'd0;
         v_count = 10'd0;
@@ -63,28 +67,40 @@ module vga_timing (
     assign active_video = (h_count < H_ACTIVE) && (v_count < V_ACTIVE);
 
     // -----------------------------------------------------------------
-    // Running line base: tracks v_count * 640 incrementally
-    //   - Wraps to 0 at end of frame
-    //   - Holds during V blanking (v_count >= V_ACTIVE-1 stops adding)
+    // line_base counts DOWN to flip image vertically (fix upside-down).
+    //   Start: (479-V_OFFSET)*640 — skip V_OFFSET blank rows from camera
+    //   Each line: subtract 640 (go one row up in buffer)
+    //   Frame end: reset to starting row
     // -----------------------------------------------------------------
-    reg [18:0] line_base;
+    localparam [9:0]  V_OFFSET = 10'd0;    // skip first 16 camera rows (blank after VSYNC)
+    localparam [18:0] LINE_TOP = (19'd479 - {9'd0, V_OFFSET}) * 19'd640;
 
-    initial line_base = 19'd0;
+    reg [18:0] line_base;
+    initial line_base = LINE_TOP;
 
     always @(posedge clk) begin
         if (rst) begin
-            line_base <= 19'd0;
+            line_base <= LINE_TOP;
         end else if (h_count == H_TOTAL - 10'd1) begin
             if (v_count == V_TOTAL - 10'd1)
-                line_base <= 19'd0;
-            else if (v_count < V_ACTIVE - 10'd1)
-                line_base <= line_base + 19'd640;
+                line_base <= LINE_TOP;
+            else if (v_count < V_ACTIVE)         // all 480 active lines
+                line_base <= line_base - 19'd640;
         end
     end
+    // -----------------------------------------------------------------
+    // rd_addr: simple combinational, matching 320 version's approach.
+    //   - Mirror horizontally: 639 - h_count  (fix left-right flip)
+    //   - H_OFFSET: manual alignment like 320's "+8"
+    //     (320 used +8 in 320px space; scaled to 640px = ~16)
+    // -----------------------------------------------------------------
+    localparam [9:0] H_OFFSET = 10'd0;
 
-    // Combinational rd_addr — matches the 320 version's frame_addr approach.
-    // BRAM sees address 1 cycle before data is consumed; no registered stage needed.
     wire in_active = (h_count < H_ACTIVE) && (v_count < V_ACTIVE);
-    assign rd_addr = in_active ? (line_base + {9'd0, h_count}) : 19'd0;
+    wire [9:0] mirror_raw = 10'd639 - h_count + H_OFFSET;
+    wire [9:0] mirror_x   = (mirror_raw > 10'd639) ? 10'd639 : mirror_raw;
+
+    assign rd_addr = in_active ? (line_base + {9'd0, mirror_x}) : 19'd0;
 
 endmodule
+
