@@ -68,7 +68,7 @@ module tb_vga_timing;
     end
 
     initial begin
-        $dumpfile("sim/vga_timing.vcd");
+        $dumpfile("sim/640/vga_timing.vcd");
         $dumpvars(0, tb_vga_timing);
 
         repeat (4) @(posedge clk);

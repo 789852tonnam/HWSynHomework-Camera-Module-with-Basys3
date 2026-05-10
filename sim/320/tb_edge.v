@@ -18,7 +18,7 @@ module tb_edge;
     end
 
     initial begin
-        $dumpfile("sim/edge.vcd");
+        $dumpfile("sim/320/edge.vcd");
         $dumpvars(0, tb_edge);
 
         // Start with blanking

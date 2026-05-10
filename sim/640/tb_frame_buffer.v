@@ -66,7 +66,7 @@ module tb_frame_buffer;
     endtask
 
     initial begin
-        $dumpfile("sim/frame_buffer.vcd");
+        $dumpfile("sim/640/frame_buffer.vcd");
         $dumpvars(0, tb_frame_buffer);
 
         // Pixel 0 (even): write luma=1 chroma=4'hA, chroma_en=1

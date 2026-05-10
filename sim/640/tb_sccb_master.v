@@ -55,7 +55,7 @@ module tb_sccb_master;
     end
 
     initial begin
-        $dumpfile("sim/sccb_master.vcd");
+        $dumpfile("sim/640/sccb_master.vcd");
         $dumpvars(0, tb_sccb_master);
 
         repeat (4) @(posedge clk);

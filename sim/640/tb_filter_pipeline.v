@@ -47,7 +47,7 @@ module tb_filter_pipeline;
     reg [11:0] raw_sample;
 
     initial begin
-        $dumpfile("sim/filter_pipeline.vcd");
+        $dumpfile("sim/640/filter_pipeline.vcd");
         $dumpvars(0, tb_filter_pipeline);
 
         repeat (4) @(posedge clk);

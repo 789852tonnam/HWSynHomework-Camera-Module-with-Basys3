@@ -1,0 +1,1452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>OV7670 → Basys 3 → VGA — Interactive Field Manual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Inter:wght@300;400;500;700;900&family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07090b;
+    --bg-2: #0c1014;
+    --ink: #d8e3d2;
+    --ink-dim: #6f7e72;
+    --rule: #16201a;
+    --phosphor: #7fff7f;
+    --phosphor-dim: #2a5c2a;
+    --amber: #ffb000;
+    --cyan: #5be4ff;
+    --magenta: #ff4fa0;
+    --red: #ff5a5f;
+    --grid: #0f1612;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    line-height: 1.6;
+    overflow-x: hidden;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-position: 0 0;
+  }
+  ::selection { background: var(--phosphor); color: #000; }
+
+  /* Layout shell */
+  main { max-width: 1280px; margin: 0 auto; padding: 0 32px; }
+  section { padding: 96px 0; border-bottom: 1px dashed var(--rule); position: relative; }
+  section:last-child { border-bottom: none; }
+
+  /* Typography */
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .display { font-family: 'Fraunces', serif; font-weight: 900; letter-spacing: -0.02em; line-height: 0.95; }
+  h1.display { font-size: clamp(48px, 9vw, 140px); }
+  h2.display { font-size: clamp(36px, 6vw, 72px); }
+  h3 { font-family: 'JetBrains Mono', monospace; font-weight: 500; font-size: 14px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--phosphor); margin-bottom: 24px; }
+  h4 { font-family: 'Inter', sans-serif; font-weight: 500; font-size: 22px; margin-bottom: 12px; color: var(--ink); }
+  p { color: var(--ink); margin-bottom: 16px; max-width: 68ch; }
+  p.lead { font-size: 22px; line-height: 1.5; color: var(--ink); }
+  small.label, .label { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim); }
+  a { color: var(--phosphor); text-decoration: none; border-bottom: 1px solid var(--phosphor-dim); }
+  a:hover { border-bottom-color: var(--phosphor); }
+  code, .kbd { font-family: 'JetBrains Mono', monospace; font-size: 0.9em; background: var(--bg-2); padding: 2px 6px; border-radius: 2px; color: var(--phosphor); border: 1px solid var(--rule); }
+  pre {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    background: var(--bg-2); border: 1px solid var(--rule);
+    padding: 20px; overflow-x: auto; line-height: 1.55;
+    color: var(--ink);
+  }
+  .crt-text { color: var(--phosphor); text-shadow: 0 0 6px rgba(127,255,127,0.6); }
+
+  /* Header / nav */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(7,9,11,0.85);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--rule);
+    padding: 12px 32px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px;
+  }
+  .topbar .ident { display: flex; gap: 16px; align-items: center; }
+  .topbar .ident .dot { width: 8px; height: 8px; background: var(--phosphor); border-radius: 50%; box-shadow: 0 0 12px var(--phosphor); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.4 } }
+  .topbar nav { display: flex; gap: 28px; font-family: 'JetBrains Mono', monospace; }
+  .topbar nav a { color: var(--ink-dim); border: none; }
+  .topbar nav a:hover { color: var(--phosphor); }
+  @media (max-width: 800px) { .topbar nav { display: none; } }
+
+  /* HERO */
+  .hero { padding: 96px 0 64px; position: relative; min-height: 80vh; display: flex; flex-direction: column; justify-content: center; }
+  .hero .slug { display: flex; gap: 24px; margin-bottom: 32px; flex-wrap: wrap; }
+  .hero .slug span { color: var(--ink-dim); }
+  .hero .slug span.tag { color: var(--phosphor); border: 1px solid var(--phosphor-dim); padding: 4px 10px; }
+  .hero h1 em { font-style: italic; color: var(--amber); display: block; }
+  .hero .hero-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; margin-top: 64px; padding-top: 32px; border-top: 1px solid var(--rule); }
+  .hero .hero-meta .cell .num { font-family: 'Fraunces', serif; font-weight: 500; font-size: 36px; color: var(--phosphor); display: block; line-height: 1; }
+  .hero .hero-meta .cell .lab { display: block; margin-top: 8px; color: var(--ink-dim); font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
+  @media (max-width: 800px) { .hero .hero-meta { grid-template-columns: repeat(2, 1fr); } }
+
+  /* Two col layout */
+  .two-col { display: grid; grid-template-columns: 280px 1fr; gap: 64px; align-items: start; }
+  .two-col .side h3 { position: sticky; top: 80px; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; gap: 24px; } }
+
+  /* Pipeline diagram */
+  .pipeline {
+    margin: 48px 0;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    align-items: stretch;
+  }
+  .pipe-stage {
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    padding: 20px 16px;
+    position: relative;
+    transition: border-color 0.3s, transform 0.3s;
+    cursor: pointer;
+  }
+  .pipe-stage:hover { border-color: var(--phosphor); transform: translateY(-2px); }
+  .pipe-stage .stage-num { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--phosphor); margin-bottom: 8px; letter-spacing: 0.12em; }
+  .pipe-stage .stage-title { font-family: 'Inter', sans-serif; font-weight: 500; font-size: 15px; color: var(--ink); margin-bottom: 6px; line-height: 1.2; }
+  .pipe-stage .stage-meta { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-dim); }
+  .pipe-arrow { color: var(--phosphor); font-family: 'JetBrains Mono', monospace; align-self: center; text-align: center; opacity: 0.7; }
+  @media (max-width: 800px) { .pipeline { grid-template-columns: 1fr; } .pipe-arrow { transform: rotate(90deg); padding: 6px 0; } }
+
+  /* Comparison table for two paths */
+  .comp-table { display: grid; grid-template-columns: 200px 1fr 1fr; border: 1px solid var(--rule); margin: 32px 0; }
+  .comp-table > div { padding: 16px 20px; border-bottom: 1px solid var(--rule); border-right: 1px solid var(--rule); font-size: 14px; }
+  .comp-table > div:nth-child(3n) { border-right: none; }
+  .comp-table > div:nth-last-child(-n+3) { border-bottom: none; }
+  .comp-table .head { background: var(--bg-2); font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--phosphor); }
+  .comp-table .row-label { font-family: 'JetBrains Mono', monospace; color: var(--ink-dim); font-size: 12px; }
+
+  /* Stats / cards */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 32px 0; }
+  .card {
+    background: var(--bg-2); border: 1px solid var(--rule);
+    padding: 24px; transition: all 0.3s;
+  }
+  .card:hover { border-color: var(--phosphor); }
+  .card .num { font-family: 'Fraunces', serif; font-weight: 500; font-size: 48px; color: var(--phosphor); line-height: 1; margin-bottom: 8px; }
+  .card .label { display: block; margin-bottom: 12px; }
+
+  /* Interactive: BRAM bar */
+  .bram-budget { margin: 48px 0; }
+  .bram-budget .row { display: grid; grid-template-columns: 200px 1fr 80px; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px dashed var(--rule); }
+  .bram-budget .name { font-family: 'JetBrains Mono', monospace; font-size: 14px; }
+  .bram-budget .bar { height: 24px; background: var(--bg-2); border: 1px solid var(--rule); position: relative; overflow: hidden; }
+  .bram-budget .fill {
+    height: 100%; background: linear-gradient(90deg, var(--phosphor) 0%, var(--phosphor-dim) 100%);
+    width: 0%; transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+  }
+  .bram-budget .fill.over { background: linear-gradient(90deg, var(--red) 0%, #6a1f23 100%); }
+  .bram-budget .verdict { font-family: 'JetBrains Mono', monospace; font-size: 12px; text-align: right; }
+  .bram-budget .verdict.fits { color: var(--phosphor); }
+  .bram-budget .verdict.over { color: var(--red); }
+  .bram-budget .limit-line { position: absolute; right: 0; top: -4px; bottom: -4px; width: 2px; background: var(--amber); }
+
+  /* Interactive: RGB-YCbCr */
+  .rgb-converter { margin: 48px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  @media (max-width: 800px) { .rgb-converter { grid-template-columns: 1fr; } }
+  .converter-pane { background: var(--bg-2); border: 1px solid var(--rule); padding: 24px; }
+  .slider-row { margin: 16px 0; }
+  .slider-row .slider-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .slider-row .slider-head .name { color: var(--ink); }
+  .slider-row .slider-head .val { color: var(--phosphor); }
+  input[type=range] { width: 100%; -webkit-appearance: none; height: 4px; background: var(--rule); outline: none; cursor: pointer; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: var(--phosphor); border-radius: 50%; cursor: pointer; box-shadow: 0 0 8px var(--phosphor); }
+  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; background: var(--phosphor); border-radius: 50%; cursor: pointer; border: none; box-shadow: 0 0 8px var(--phosphor); }
+  .swatch { width: 100%; height: 120px; margin: 16px 0; border: 1px solid var(--rule); transition: background 0.2s; }
+  .ycc-readout { font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.9; color: var(--ink); }
+  .ycc-readout span.lab { color: var(--ink-dim); }
+  .ycc-readout span.val { color: var(--phosphor); }
+  .ycc-readout span.bin { color: var(--amber); }
+
+  /* Filter mode demo */
+  .filter-demo { margin: 48px 0; }
+  .filter-demo .controls { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .filter-demo button {
+    background: transparent; border: 1px solid var(--rule);
+    color: var(--ink-dim); padding: 12px 20px;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .filter-demo button:hover, .filter-demo button.active { border-color: var(--phosphor); color: var(--phosphor); background: var(--bg-2); }
+  .filter-demo .canvas-wrap { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 800px) { .filter-demo .canvas-wrap { grid-template-columns: 1fr; } }
+  .filter-demo canvas { width: 100%; height: auto; display: block; border: 1px solid var(--rule); image-rendering: pixelated; background: #000; }
+  .filter-demo .canvas-label { display: flex; justify-content: space-between; padding: 8px 0; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .filter-demo .canvas-label .left { color: var(--ink-dim); }
+  .filter-demo .canvas-label .right { color: var(--phosphor); }
+  .filter-demo .threshold-row { margin-top: 16px; display: none; }
+  .filter-demo .threshold-row.show { display: block; }
+  .filter-demo .iso-row { margin-top: 16px; display: none; }
+  .filter-demo .iso-row.show { display: flex; gap: 8px; }
+  .filter-demo .iso-row button { padding: 8px 14px; }
+
+  /* Sobel kernel viz */
+  .sobel-grid { display: grid; grid-template-columns: repeat(3, 50px); gap: 4px; margin: 16px 0; }
+  .sobel-grid .cell { width: 50px; height: 50px; background: var(--bg-2); border: 1px solid var(--rule); display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 16px; color: var(--phosphor); }
+  .sobel-pair { display: flex; gap: 32px; flex-wrap: wrap; margin: 24px 0; }
+  .sobel-pair .ker .label { display: block; margin-bottom: 8px; }
+
+  /* Switch map */
+  .sw-map { display: grid; grid-template-columns: repeat(16, 1fr); gap: 4px; margin: 32px 0; }
+  .sw-cell {
+    aspect-ratio: 1;
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    padding: 4px;
+    font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    color: var(--ink-dim);
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s;
+  }
+  .sw-cell .pin { width: 10px; height: 18px; background: var(--rule); margin-bottom: 4px; transition: all 0.2s; }
+  .sw-cell.up .pin { background: var(--phosphor); box-shadow: 0 0 8px var(--phosphor); transform: translateY(-4px); }
+  .sw-cell:hover { border-color: var(--phosphor); }
+  .sw-cell .nm { font-size: 9px; }
+  .sw-readout {
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    padding: 16px 24px;
+    margin-top: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    min-height: 100px;
+  }
+  .sw-readout .line { display: flex; justify-content: space-between; padding: 4px 0; }
+  .sw-readout .line .key { color: var(--ink-dim); }
+  .sw-readout .line .val { color: var(--phosphor); }
+
+  /* Glossary */
+  dl.glossary { display: grid; grid-template-columns: 200px 1fr; gap: 0; border-top: 1px solid var(--rule); }
+  dl.glossary dt, dl.glossary dd { padding: 16px 24px 16px 0; border-bottom: 1px solid var(--rule); }
+  dl.glossary dt { font-family: 'JetBrains Mono', monospace; font-weight: 500; color: var(--phosphor); font-size: 14px; }
+  dl.glossary dd { color: var(--ink); }
+  @media (max-width: 800px) { dl.glossary { grid-template-columns: 1fr; } dl.glossary dt { padding-bottom: 4px; border-bottom: none; } }
+
+  /* CRT scan effect on hero */
+  .scan-overlay {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(127,255,127,0.015) 3px);
+  }
+
+  /* Footer */
+  footer { padding: 64px 32px 32px; border-top: 1px dashed var(--rule); font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-dim); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 24px; }
+
+  /* Misc utility */
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  @media (max-width: 800px) { .row-2 { grid-template-columns: 1fr; } }
+  .badge { display: inline-block; padding: 2px 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px; border: 1px solid var(--phosphor-dim); color: var(--phosphor); margin-right: 6px; }
+  .badge.amb { color: var(--amber); border-color: #5c4400; }
+  .badge.cyn { color: var(--cyan); border-color: #155f70; }
+
+  /* Trace separator */
+  .trace { height: 60px; position: relative; margin: 32px 0; overflow: hidden; }
+  .trace svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+  .trace path { stroke: var(--phosphor-dim); stroke-width: 1; fill: none; }
+
+  /* Anchor offset for sticky nav */
+  section { scroll-margin-top: 80px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="ident">
+    <div class="dot"></div>
+    <span class="mono">SIG/OK · 25.000 MHz · BASYS3 · XC7A35T-1CPG236C</span>
+  </div>
+  <nav>
+    <a href="#brief">brief</a>
+    <a href="#hardware">hardware</a>
+    <a href="#paths">paths</a>
+    <a href="#ycbcr">ycbcr</a>
+    <a href="#filters">filters</a>
+    <a href="#switches">switches</a>
+    <a href="#engineering">engineering</a>
+    <a href="#pinmap">pinmap</a>
+    <a href="#modules">modules</a>
+    <a href="#simulation">sim</a>
+    <a href="#challenges">challenges</a>
+    <a href="#ai-usage">ai</a>
+    <a href="#glossary">glossary</a>
+  </nav>
+</div>
+
+<main>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="scan-overlay"></div>
+  <div class="slug">
+    <span class="tag mono">FIELD MANUAL · v1.0</span>
+    <span class="mono">HW SYNTHESIS LAB I · 2025/2 · FINAL PROJECT</span>
+    <span class="mono">BASYS 3 + OV7670 + VGA</span>
+  </div>
+  <h1 class="display">A camera,<br/>an FPGA,<br/><em>and 1.84 megabits.</em></h1>
+  <p class="lead" style="margin-top: 32px; max-width: 56ch;">
+    This page is an interactive walkthrough of a real-time video processing project. It explains
+    every block, every clock, every byte — for someone who has never opened a Verilog file.
+  </p>
+  <div class="hero-meta">
+    <div class="cell"><span class="num">640×480</span><span class="lab">Live VGA out</span></div>
+    <div class="cell"><span class="num">60 Hz</span><span class="lab">Frame rate</span></div>
+    <div class="cell"><span class="num">50 / 50</span><span class="lab">BRAM tiles used</span></div>
+    <div class="cell"><span class="num">4 modes</span><span class="lab">Filters via switches</span></div>
+  </div>
+</section>
+
+<!-- BRIEF -->
+<section id="brief">
+  <div class="two-col">
+    <div class="side">
+      <h3>§00 · The Brief</h3>
+      <small class="label">What we were asked to build</small>
+    </div>
+    <div>
+      <h2 class="display">In one screen.</h2>
+      <p class="lead" style="margin-top: 24px;">
+        Take live video from a tiny camera. Move every pixel through an FPGA. Show the result on a monitor.
+        Add four filters the user can switch between with the slide switches on the board.
+      </p>
+
+      <div class="trace"><svg viewBox="0 0 1000 60" preserveAspectRatio="none">
+        <path d="M0,30 L200,30 L210,10 L230,50 L250,30 L1000,30" />
+      </svg></div>
+
+      <h4 style="margin-top: 24px;">The four filter modes</h4>
+      <p>The user picks one with two slide switches (<code>SW[1:0]</code>). Every pixel of every frame goes through the chosen filter.</p>
+      <div class="card-grid">
+        <div class="card"><span class="label mono">SW · 00</span><h4>RAW</h4><p style="font-size: 14px; color: var(--ink-dim);">Show what the camera sees, untouched.</p></div>
+        <div class="card"><span class="label mono">SW · 01</span><h4>INVERT</h4><p style="font-size: 14px; color: var(--ink-dim);">Photographic negative. Bitwise NOT.</p></div>
+        <div class="card"><span class="label mono">SW · 10</span><h4>COLOR ISOLATION</h4><p style="font-size: 14px; color: var(--ink-dim);">Keep one color channel, kill the rest. Channel from <code>SW[3:2]</code>.</p></div>
+        <div class="card"><span class="label mono">SW · 11</span><h4>EDGE</h4><p style="font-size: 14px; color: var(--ink-dim);">Find the outlines (Sobel kernel). Threshold from <code>SW[7:4]</code>.</p></div>
+      </div>
+
+      <h4 style="margin-top: 32px;">The +5 extra credit</h4>
+      <p>The base spec lets you cheat by shrinking the image to 320×240. Real 640×480, kept all the way through, is worth +5 points — and it is <em>much</em> harder because the on-chip RAM is not big enough.
+      Both versions live in this repo.</p>
+    </div>
+  </div>
+</section>
+
+<!-- HARDWARE -->
+<section id="hardware">
+  <div class="two-col">
+    <div class="side">
+      <h3>§01 · Hardware</h3>
+      <small class="label">The pieces sitting on the desk</small>
+    </div>
+    <div>
+      <h2 class="display">Three silicon things, glued together.</h2>
+
+      <div class="card-grid" style="margin-top: 32px;">
+        <div class="card">
+          <span class="label">Board</span>
+          <h4>Digilent Basys 3</h4>
+          <p style="font-size: 14px;">Educational FPGA board. Xilinx <code>XC7A35T-1CPG236C</code>. 100 MHz crystal. 16 switches, 5 buttons, 16 LEDs, a 4-digit 7-seg, USB, VGA, two Pmod headers.</p>
+          <p class="mono" style="font-size: 12px; color: var(--ink-dim);">≈ 1.84 Mbit BRAM · 50 BRAM36 tiles</p>
+        </div>
+        <div class="card">
+          <span class="label">Camera</span>
+          <h4>OV7670 Pmod</h4>
+          <p style="font-size: 14px;">A $5 VGA-resolution CMOS sensor. 8-bit parallel data bus + sync (HREF, VSYNC) + I²C-like config bus (SCCB). Outputs RGB565 by default.</p>
+          <p class="mono" style="font-size: 12px; color: var(--ink-dim);">XCLK ← 24 MHz · PCLK → ~24 MHz · D[7:0] · HREF · VSYNC · SIOC · SIOD</p>
+        </div>
+        <div class="card">
+          <span class="label">Display</span>
+          <h4>Any VGA monitor</h4>
+          <p style="font-size: 14px;">Basys 3 has a built-in 12-bit VGA port — 4 bits per channel via a resistor ladder DAC. Plug in any old monitor that takes the blue connector.</p>
+          <p class="mono" style="font-size: 12px; color: var(--ink-dim);">640×480 @ 60 Hz · 25 MHz pixel clock</p>
+        </div>
+      </div>
+
+      <h4 style="margin-top: 48px;">Wiring (simplified)</h4>
+      <pre>
+   ┌────────────┐     8-bit pixel bus      ┌──────────────────┐    R[3:0],G[3:0],B[3:0]   ┌────────┐
+   │   OV7670   │ ──────────────────────▶ │  FPGA (XC7A35T)  │ ──────────────────────▶  │  VGA   │
+   │  (camera)  │ ──── HREF, VSYNC ────▶ │   on Basys 3     │ ──── HSYNC, VSYNC ────▶  │ monitor│
+   │            │ ◀─── SCCB (I²C-like) ─▶│                  │                          │        │
+   │   XCLK ◀───┤                        │ ◀─ 100 MHz xtal  │                          │        │
+   └────────────┘                        └──────────────────┘                          └────────┘
+            ▲                                       │
+            │ 24 MHz from FPGA (MMCM)              │ 25 MHz pixel clock (also from MMCM)
+      </pre>
+      <p style="margin-top: 24px;">Two interesting notes:</p>
+      <ul style="list-style: none; padding-left: 0;">
+        <li style="margin-bottom: 12px;"><span class="badge amb">PCLK → A16</span> The camera's pixel clock comes back into the FPGA on a normal I/O pin, not a dedicated clock pin. Vivado refuses by default; we override with <code>CLOCK_DEDICATED_ROUTE FALSE</code>. Works at 25 MHz on this small design.</li>
+        <li style="margin-bottom: 12px;"><span class="badge cyn">SCCB needs pull-ups</span> The config bus is open-drain, like I²C. Basys 3 Pmod has no external pull-ups, so we use the FPGA's internal ones (<code>set_property PULLUP true</code>).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- TWO PATHS -->
+<section id="paths">
+  <div class="two-col">
+    <div class="side">
+      <h3>§02 · Two Paths</h3>
+      <small class="label">Same problem, two solutions</small>
+    </div>
+    <div>
+      <h2 class="display">The same project<br/>built twice.</h2>
+      <p class="lead" style="margin-top: 24px;">
+        The repo contains two complete versions. The <strong>320 path</strong> meets the basic spec by shrinking the picture in half. The <strong>640 path</strong> goes for the +5 extra credit by keeping it full-resolution — at the cost of every spare bit on the chip.
+      </p>
+
+      <div class="comp-table">
+        <div class="head"></div>
+        <div class="head">320 path · baseline</div>
+        <div class="head">640 path · +5 EC</div>
+
+        <div class="row-label">Top file</div>
+        <div><code>sources_1/new/top_module.v</code></div>
+        <div><code>rtl/top.v</code></div>
+
+        <div class="row-label">Stored resolution</div>
+        <div>320 × 240</div>
+        <div>640 × 480</div>
+
+        <div class="row-label">Pixel encoding</div>
+        <div>RGB444 — 12 bits/pixel</div>
+        <div>YCbCr 4:2:2 — 5 bits/pixel avg</div>
+
+        <div class="row-label">Frame buffer size</div>
+        <div>76,800 × 12 b</div>
+        <div>luma 307k × 3 b + chroma 153k × 4 b</div>
+
+        <div class="row-label">BRAM36 tiles used</div>
+        <div>~14 (out of 50)</div>
+        <div>~50 (out of 50)</div>
+
+        <div class="row-label">VGA scaling</div>
+        <div>upscale 320→640, line-double 240→480</div>
+        <div>native, no scaling</div>
+
+        <div class="row-label">What's clever</div>
+        <div>Combinational read addr → 1-cycle pipeline → near-perfect alignment</div>
+        <div>Split BRAM (luma vs chroma), 4:2:2 subsampling, 2×2 Bayer dither</div>
+      </div>
+
+      <h4 style="margin-top: 48px;">320 path — block diagram</h4>
+      <div class="pipeline">
+        <div class="pipe-stage">
+          <div class="stage-num">[0] CAPTURE</div>
+          <div class="stage-title">Pair bytes, downsample 2×2, pack RGB444</div>
+          <div class="stage-meta">camera_capture_640x320.v</div>
+        </div>
+        <div class="pipe-arrow">▶</div>
+        <div class="pipe-stage">
+          <div class="stage-num">[1] STORE</div>
+          <div class="stage-title">76,800×12 BRAM, dual-clock</div>
+          <div class="stage-meta">frame_buffer_640x320.v</div>
+        </div>
+        <div class="pipe-arrow">▶</div>
+        <div class="pipe-stage">
+          <div class="stage-num">[2] DISPLAY + FILTER</div>
+          <div class="stage-title">Read at 25 MHz, scale, route through filter mode</div>
+          <div class="stage-meta">vga_640x320_display.v · top_module.v</div>
+        </div>
+      </div>
+
+      <h4 style="margin-top: 32px;">640 path — block diagram</h4>
+      <div class="pipeline">
+        <div class="pipe-stage">
+          <div class="stage-num">[0] CAPTURE</div>
+          <div class="stage-title">RGB565 → YCbCr 4:2:2 (Y3, Cb2, Cr2)</div>
+          <div class="stage-meta">cam_capture.v</div>
+        </div>
+        <div class="pipe-arrow">▶</div>
+        <div class="pipe-stage">
+          <div class="stage-num">[1] STORE</div>
+          <div class="stage-title">Split BRAMs: luma + chroma</div>
+          <div class="stage-meta">frame_buffer.v</div>
+        </div>
+        <div class="pipe-arrow">▶</div>
+        <div class="pipe-stage">
+          <div class="stage-num">[2] DECODE + FILTER</div>
+          <div class="stage-title">YCbCr → RGB444 with Bayer dither, then filter</div>
+          <div class="stage-meta">ycbcr_to_rgb444.v · filter_pipeline.v</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BRAM BUDGET -->
+<section id="bram">
+  <div class="two-col">
+    <div class="side">
+      <h3>§03 · The Memory Wall</h3>
+      <small class="label">Why we cannot just store the picture</small>
+    </div>
+    <div>
+      <h2 class="display">A 640×480 picture<br/>does not fit.</h2>
+      <p class="lead" style="margin-top: 24px;">
+        On-chip RAM (BRAM) is the FPGA's fast, dedicated picture-storage. The XC7A35T has 50 tiles, totaling about <strong>1.84 megabits</strong>. A naive 640×480 RGB picture is 3.69 megabits. <em>Two times too big.</em>
+      </p>
+      <p>So the entire 640 path is structured around one question: <strong>how do we throw away half the bits without it looking terrible?</strong></p>
+
+      <div class="bram-budget" id="bram-chart">
+        <small class="label">Bits required to store one 640×480 frame · vertical line = chip limit</small>
+      </div>
+
+      <p style="margin-top: 32px;"><strong>YCbCr 4:2:2 + aggressive bit-depth reduction (Y=3 bits, Cb=Cr=2 bits)</strong> is the winner: it fits, and human eyes — which evolved to resolve brightness much better than color — barely notice the chroma loss. This is the same trick JPEG, MPEG, HDMI 4:2:2, and DV use. We just push it further than usual.</p>
+    </div>
+  </div>
+</section>
+
+<!-- YCbCr -->
+<section id="ycbcr">
+  <div class="two-col">
+    <div class="side">
+      <h3>§04 · YCbCr · Encode</h3>
+      <small class="label">Try it yourself</small>
+    </div>
+    <div>
+      <h2 class="display">Splitting<br/>brightness from color.</h2>
+      <p class="lead" style="margin-top: 24px;">
+        Move the sliders. The chip computes <code>Y</code> (brightness) and the two chroma values (<code>Cb</code> = blue-vs-yellow, <code>Cr</code> = red-vs-cyan), then quantizes them down to 3 + 2 + 2 bits. The bottom panel shows what is actually stored in BRAM.
+      </p>
+
+      <div class="rgb-converter">
+        <div class="converter-pane">
+          <small class="label">Input · 8-bit per channel from camera</small>
+          <div class="swatch" id="rgb-swatch"></div>
+          <div class="slider-row"><div class="slider-head"><span class="name">R</span><span class="val" id="r-val">200</span></div><input type="range" min="0" max="255" value="200" id="r-slider"/></div>
+          <div class="slider-row"><div class="slider-head"><span class="name">G</span><span class="val" id="g-val">120</span></div><input type="range" min="0" max="255" value="120" id="g-slider"/></div>
+          <div class="slider-row"><div class="slider-head"><span class="name">B</span><span class="val" id="b-val">80</span></div><input type="range" min="0" max="255" value="80" id="b-slider"/></div>
+        </div>
+        <div class="converter-pane">
+          <small class="label">Output · what BRAM stores</small>
+          <div class="swatch" id="ycbcr-swatch"></div>
+          <div class="ycc-readout">
+            <div><span class="lab">Y8 = (77·R + 150·G + 29·B) >> 8 =</span> <span class="val" id="y8-val">—</span></div>
+            <div><span class="lab">Cb_raw = B − Y =</span> <span class="val" id="cbraw-val">—</span> &nbsp;→&nbsp; bin <span class="bin" id="cb-bin">—</span></div>
+            <div><span class="lab">Cr_raw = R − Y =</span> <span class="val" id="crraw-val">—</span> &nbsp;→&nbsp; bin <span class="bin" id="cr-bin">—</span></div>
+            <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--rule);">
+              <span class="lab">Stored:</span> Y3 = <span class="val" id="y3-val">—</span> &nbsp;|&nbsp; Cb2 = <span class="bin" id="cb2-val">—</span> &nbsp;|&nbsp; Cr2 = <span class="bin" id="cr2-val">—</span>
+            </div>
+            <div style="margin-top: 8px;">
+              <span class="lab">Total bits/pixel:</span> <span class="val">3</span> &nbsp;+&nbsp; <span class="val">(2+2)/2</span> &nbsp;=&nbsp; <span class="val">5</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h4 style="margin-top: 32px;">The chroma quantization bins</h4>
+      <p>Each chroma value is signed (it can be positive or negative — that's what "blue vs yellow" means). We bucket it into 4 bins at the thresholds shown below:</p>
+      <pre>
+bin 0 :  diff <  -48      strong deficit
+bin 1 :  -48 ≤ diff < 0   mild deficit  ← NEUTRAL pixel (R=G=B) lands here
+bin 2 :   0  ≤ diff < 48  mild positive
+bin 3 :  diff ≥ 48        strong positive
+      </pre>
+      <p>One of the most painful bring-up bugs: if bin-1 doesn't decode to "no offset," every neutral gray pixel comes out tinged green. Fixed by tuning the LUT so bin-1 = 0 offset.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FILTERS -->
+<section id="filters">
+  <div class="two-col">
+    <div class="side">
+      <h3>§05 · Filters</h3>
+      <small class="label">All four modes, live</small>
+    </div>
+    <div>
+      <h2 class="display">Click a switch.<br/>Watch the pixels change.</h2>
+      <p class="lead" style="margin-top: 24px;">
+        On the real board you slide <code>SW[1:0]</code>. Here you click. The same pixel math runs in your browser as runs in the FPGA — every pixel, every frame.
+      </p>
+
+      <div class="filter-demo">
+        <div class="controls">
+          <button class="active" data-mode="raw">SW 00 · RAW</button>
+          <button data-mode="invert">SW 01 · INVERT</button>
+          <button data-mode="iso">SW 10 · COLOR ISO</button>
+          <button data-mode="edge">SW 11 · EDGE</button>
+        </div>
+        <div class="iso-row">
+          <button class="active" data-iso="r">R</button>
+          <button data-iso="g">G</button>
+          <button data-iso="b">B</button>
+        </div>
+        <div class="threshold-row">
+          <div class="slider-head"><span class="name mono">SW[7:4] · Edge threshold</span><span class="val mono" id="thresh-val">8</span></div>
+          <input type="range" min="0" max="15" value="8" id="thresh-slider"/>
+        </div>
+        <div class="canvas-wrap">
+          <div>
+            <canvas id="canvas-src" width="320" height="240"></canvas>
+            <div class="canvas-label"><span class="left">INPUT (synthetic frame)</span><span class="right">320 × 240</span></div>
+          </div>
+          <div>
+            <canvas id="canvas-out" width="320" height="240"></canvas>
+            <div class="canvas-label"><span class="left">FILTERED</span><span class="right" id="out-label">RAW</span></div>
+          </div>
+        </div>
+      </div>
+
+      <h4 style="margin-top: 32px;">How each mode works inside the FPGA</h4>
+      <ul style="list-style: none; padding-left: 0;">
+        <li style="margin-bottom: 16px;"><span class="badge">RAW</span> Wire the BRAM read straight to the VGA port. No arithmetic.</li>
+        <li style="margin-bottom: 16px;"><span class="badge">INVERT</span> One XOR with all-ones per channel. Two LUTs.</li>
+        <li style="margin-bottom: 16px;"><span class="badge">COLOR ISO</span> Three muxes — pass one channel, force the other two to zero. <code>SW[3:2]</code> picks which.</li>
+        <li style="margin-bottom: 16px;"><span class="badge">EDGE</span> The big one. Run a 3×3 Sobel kernel over the brightness channel, compute |Gx|+|Gy|, compare to the threshold from <code>SW[7:4]</code>, output white-on-black.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- SOBEL -->
+<section id="sobel">
+  <div class="two-col">
+    <div class="side">
+      <h3>§06 · Sobel kernel</h3>
+      <small class="label">How the edge filter actually works</small>
+    </div>
+    <div>
+      <h2 class="display">A 3×3 magnifying glass<br/>that hates gradients.</h2>
+      <p class="lead" style="margin-top: 24px;">
+        At every pixel, look at its 8 neighbors. Multiply each by a number (the kernel weights), add them up, take the absolute value. That's <code>Gx</code> for the horizontal direction and <code>Gy</code> for vertical. Sum them. If the result is bigger than the threshold, paint white. Else black.
+      </p>
+
+      <div class="sobel-pair">
+        <div class="ker">
+          <span class="label">Gx kernel (horizontal change)</span>
+          <div class="sobel-grid">
+            <div class="cell">−1</div><div class="cell">0</div><div class="cell">+1</div>
+            <div class="cell">−2</div><div class="cell">0</div><div class="cell">+2</div>
+            <div class="cell">−1</div><div class="cell">0</div><div class="cell">+1</div>
+          </div>
+        </div>
+        <div class="ker">
+          <span class="label">Gy kernel (vertical change)</span>
+          <div class="sobel-grid">
+            <div class="cell">−1</div><div class="cell">−2</div><div class="cell">−1</div>
+            <div class="cell">0</div><div class="cell">0</div><div class="cell">0</div>
+            <div class="cell">+1</div><div class="cell">+2</div><div class="cell">+1</div>
+          </div>
+        </div>
+        <div class="ker">
+          <span class="label">Magnitude</span>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 14px; padding: 16px 0;">
+            |Gx| + |Gy|
+            <div style="font-size: 11px; color: var(--ink-dim); margin-top: 8px;">L1 approximation.<br/>Saves a multiplier.</div>
+          </div>
+        </div>
+      </div>
+
+      <h4 style="margin-top: 24px;">The hardware trick: line buffers</h4>
+      <p>To compute the kernel at row <code>r</code>, column <code>c</code>, the FPGA needs rows <code>r-1, r, r+1</code> all available at the same time. But pixels arrive one at a time, in scan order. The fix: <strong>three line buffers</strong> — small RAMs each holding one full row. They rotate: as a new row arrives, the oldest gets overwritten. At any instant, three rows of luma are addressable.</p>
+      <p>Subtle bug avoided in the 640 path: the buffer being written this cycle returns the <em>old</em> value if you also read it. The fix is to forward <code>pix_in</code> directly into the bottom-right of the window, bypassing the RAM read.</p>
+    </div>
+  </div>
+</section>
+
+<!-- SWITCH MAP -->
+<section id="switches">
+  <div class="two-col">
+    <div class="side">
+      <h3>§07 · Switch &amp; LED map</h3>
+      <small class="label">Click to toggle</small>
+    </div>
+    <div>
+      <h2 class="display">Sixteen switches.<br/>Four meanings.</h2>
+      <p class="lead" style="margin-top: 24px;">Click any switch below. The readout shows what the FPGA <em>sees</em> right now.</p>
+
+      <small class="label" style="display: block; margin-top: 32px;">SW[15] ← → SW[0]</small>
+      <div class="sw-map" id="sw-map"></div>
+      <div class="sw-readout" id="sw-readout"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ENGINEERING -->
+<section id="engineering">
+  <div class="two-col">
+    <div class="side">
+      <h3>§08 · Engineering</h3>
+      <small class="label">The cross-cutting techniques</small>
+    </div>
+    <div>
+      <h2 class="display">Things that don't show up<br/>in screenshots.</h2>
+
+      <div class="card-grid" style="margin-top: 32px;">
+        <div class="card">
+          <span class="label">Clocks</span>
+          <h4>MMCM × 2 outputs</h4>
+          <p style="font-size: 14px;">One 100 MHz crystal becomes 25 MHz (VGA) + 24 MHz (camera XCLK). Through Vivado's <code>MMCME2_BASE</code> primitive. VCO at 1200 MHz.</p>
+        </div>
+        <div class="card">
+          <span class="label">Cross-domain</span>
+          <h4>Dual-clock BRAM</h4>
+          <p style="font-size: 14px;">The frame buffer is the entire CDC. Camera writes at 24 MHz, VGA reads at 25 MHz. The BRAM hardware handles the handshake.</p>
+        </div>
+        <div class="card">
+          <span class="label">Pulse CDC</span>
+          <h4>Toggle synchronizer</h4>
+          <p style="font-size: 14px;">VSYNC pulse needs to cross domains for the frame-rate LED. Toggle flop + 3-FF synchronizer + edge detect. ASYNC_REG attribute keeps the flops in one slice.</p>
+        </div>
+        <div class="card">
+          <span class="label">SCCB</span>
+          <h4>Open-drain FSM</h4>
+          <p style="font-size: 14px;">7-state machine sends 3-byte writes (ID, sub-addr, data). Bus is open-drain — drive low or float. 77 registers walked at start-up.</p>
+        </div>
+        <div class="card">
+          <span class="label">Debouncing</span>
+          <h4>20-bit stable counter</h4>
+          <p style="font-size: 14px;">Every switch and BTNC: two-flop sync + 2²⁰-cycle stability counter (~42 ms). Mechanical bounce filtered out.</p>
+        </div>
+        <div class="card">
+          <span class="label">Geometric</span>
+          <h4>Flip + mirror, free</h4>
+          <p style="font-size: 14px;">Camera mounting orientation makes the picture upside-down and mirrored. Fixed inside <code>rd_addr</code>: <code>line_base</code> counts down, <code>mirror_x = 639 − h_count</code>. No multiplier inferred.</p>
+        </div>
+      </div>
+
+      <h4 style="margin-top: 48px;">Pipeline depth · the alignment dance</h4>
+      <p>A pixel doesn't appear at the VGA pin the same cycle it's read. Every register in the path adds one cycle of delay. To make the picture line up, the <code>active_video</code> signal — which says "draw now" — has to be delayed by exactly the same amount.</p>
+      <pre>
+   STAGE                              CYCLES   FILE
+   ────────────────────────────────   ──────   ──────────────────────────
+   rd_addr from h_count               0        vga_timing.v   (combinational!)
+   frame_buffer BRAM read             1        frame_buffer.v
+   filter_pipeline output reg         1        filter_pipeline.v
+   ────────────────────────────────   ──────
+   Total RAW / INV / ISO              2 cycles
+   EDGE adds line_buffer3             +1
+   ────────────────────────────────   ──────
+   Total EDGE                         3 cycles → black border absorbs the 1-pixel diff
+      </pre>
+      <p>The earlier rebuild had 4 cycles. Result: every pixel was shifted 4 columns right of where it should be. Cured by stripping out two redundant register stages.</p>
+    </div>
+  </div>
+</section>
+
+<!-- HISTORY -->
+<section id="history">
+  <div class="two-col">
+    <div class="side">
+      <h3>§09 · History</h3>
+      <small class="label">What was tried, what worked</small>
+    </div>
+    <div>
+      <h2 class="display">Four attempts.<br/>One survivor.</h2>
+      <p class="lead" style="margin-top: 24px;">
+        The 640 path went through four pixel-encoding strategies before settling on YCbCr 4:2:2.
+      </p>
+
+      <div style="margin-top: 32px;">
+        <div style="display: grid; grid-template-columns: 80px 1fr 100px; gap: 16px; padding: 16px 0; border-bottom: 1px dashed var(--rule);">
+          <div class="mono" style="color: var(--phosphor);">v1</div>
+          <div><strong>RGB565 raw</strong><div style="color: var(--ink-dim); font-size: 13px;">16 bits per pixel × 307,200 pixels = 4.9 Mbits</div></div>
+          <div class="mono" style="color: var(--red); text-align: right;">DOES NOT FIT</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 80px 1fr 100px; gap: 16px; padding: 16px 0; border-bottom: 1px dashed var(--rule);">
+          <div class="mono" style="color: var(--phosphor);">v2</div>
+          <div><strong>RGB332</strong><div style="color: var(--ink-dim); font-size: 13px;">8 bits per pixel — fits, but only 256 distinct colors</div></div>
+          <div class="mono" style="color: var(--amber); text-align: right;">UGLY</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 80px 1fr 100px; gap: 16px; padding: 16px 0; border-bottom: 1px dashed var(--rule);">
+          <div class="mono" style="color: var(--phosphor);">v3</div>
+          <div><strong>Y3 (mono)</strong><div style="color: var(--ink-dim); font-size: 13px;">3 bits luma only — fits easily, looks great, but no color</div></div>
+          <div class="mono" style="color: var(--amber); text-align: right;">NO COLOR</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 80px 1fr 100px; gap: 16px; padding: 16px 0;">
+          <div class="mono" style="color: var(--phosphor);">v4</div>
+          <div><strong>YCbCr 4:2:2 (Y3 + Cb2/Cr2)</strong><div style="color: var(--ink-dim); font-size: 13px;">Splits luma from chroma, subsamples chroma horizontally — fits exactly</div></div>
+          <div class="mono" style="color: var(--phosphor); text-align: right;">SHIPS</div>
+        </div>
+      </div>
+
+      <h4 style="margin-top: 48px;">Two visible bugs hunted along the way</h4>
+      <ul style="list-style: none; padding-left: 0;">
+        <li style="margin-bottom: 16px;"><span class="badge amb">GREEN TINT</span> Every neutral pixel came out greenish. The chroma decoder's bin-1 entry had a non-zero offset. Fix: tune bin-1 = 0 in all four LUTs.</li>
+        <li style="margin-bottom: 16px;"><span class="badge amb">RIGHT SHIFT</span> Picture content displayed 4 pixels to the right. Pipeline depth was 4 instead of 2. Removed redundant register stages, alignment came back.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- LIMITS -->
+<section id="limits">
+  <div class="two-col">
+    <div class="side">
+      <h3>§10 · Limits</h3>
+      <small class="label">What's still imperfect</small>
+    </div>
+    <div>
+      <h2 class="display">Honest about<br/>the rough edges.</h2>
+      <div class="card-grid" style="margin-top: 32px;">
+        <div class="card"><span class="label">color</span><h4>Recognizable, not accurate</h4><p style="font-size: 14px;">2 bits of chroma per pair is a hard ceiling. Going higher would need either compression or another BRAM strategy.</p></div>
+        <div class="card"><span class="label">edge mode</span><h4>Shimmering on fine detail</h4><p style="font-size: 14px;">Sub-pixel jitter from running Sobel on aggressively quantized luma. A 3-tap horizontal blur would fix it but needs another line buffer.</p></div>
+        <div class="card"><span class="label">tearing</span><h4>No double buffer</h4><p style="font-size: 14px;">60 Hz read vs ~30 Hz write means a moving tear band. Acceptable for preview, but a true double buffer needs ~3 Mbits we don't have.</p></div>
+        <div class="card"><span class="label">camera</span><h4>AGC settle</h4><p style="font-size: 14px;">Auto exposure is on; the camera adjusts itself for several seconds at power-up before the picture stabilizes.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PIN MAP -->
+<section id="pinmap">
+  <div class="two-col">
+    <div class="side">
+      <h3>§09 · Pin Map</h3>
+      <small class="label">FPGA ↔ Camera wiring</small>
+    </div>
+    <div>
+      <h2 class="display">Every wire, named.</h2>
+      <p class="lead" style="margin-top: 24px;">
+        The OV7670 Pmod connects to two Pmod headers on the Basys 3. Each FPGA pin is locked in the XDC constraints file.
+      </p>
+
+      <div class="comp-table" style="grid-template-columns: 1fr 1fr; margin-top: 32px;">
+        <div class="head">FPGA Pin</div>
+        <div class="head">Camera Signal</div>
+
+        <div class="row-label mono">P17</div><div>D0</div>
+        <div class="row-label mono">N17</div><div>D1</div>
+        <div class="row-label mono">M19</div><div>D2</div>
+        <div class="row-label mono">M18</div><div>D3</div>
+        <div class="row-label mono">L17</div><div>D4</div>
+        <div class="row-label mono">K17</div><div>D5</div>
+        <div class="row-label mono">C16</div><div>D6</div>
+        <div class="row-label mono">B16</div><div>D7</div>
+        <div class="row-label mono">A17</div><div>HREF</div>
+        <div class="row-label mono">A16</div><div>PCLK</div>
+        <div class="row-label mono">R18</div><div>PWDN</div>
+        <div class="row-label mono">P18</div><div>RST</div>
+        <div class="row-label mono">A14</div><div>SCL</div>
+        <div class="row-label mono">A15</div><div>SDA</div>
+        <div class="row-label mono">B15</div><div>VSYNC</div>
+        <div class="row-label mono">C15</div><div>XCLK</div>
+      </div>
+
+      <div class="card-grid" style="margin-top: 32px;">
+        <div class="card">
+          <span class="label">PCLK · A16</span>
+          <h4>Not a dedicated clock pin</h4>
+          <p style="font-size: 14px;">Vivado refuses to route PCLK through the clock network by default. Requires <code>set_property CLOCK_DEDICATED_ROUTE FALSE</code> in the XDC. Works reliably at 24 MHz on this small design.</p>
+        </div>
+        <div class="card">
+          <span class="label">SCL / SDA · A14, A15</span>
+          <h4>Internal pull-ups required</h4>
+          <p style="font-size: 14px;">SCCB is open-drain. The Pmod connector has no external pull-up resistors, so both lines need <code>set_property PULLUP true</code> in the XDC to keep them high when not driven low.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MODULE DETAIL -->
+<section id="modules">
+  <div class="two-col">
+    <div class="side">
+      <h3>§10 · Module Detail</h3>
+      <small class="label">Every RTL file, dissected</small>
+    </div>
+    <div>
+      <h2 class="display">Fourteen files.<br/>One picture.</h2>
+      <p class="lead" style="margin-top: 24px;">
+        The 640 path is split into small, single-responsibility modules. Each one does one job; they are wired together in <code>top.v</code>.
+      </p>
+
+      <div class="card-grid" style="margin-top: 32px;">
+
+        <div class="card">
+          <span class="label mono">rtl/top.v</span>
+          <h4>Top Wrapper</h4>
+          <p style="font-size: 14px;">Routes clocks, resets, and switches. Instantiates every sub-module. <code>SW[1:0]</code>=filter mode, <code>SW[3:2]</code>=iso channel, <code>SW[7:4]</code>=Sobel threshold, <code>SW[8]</code>=OV7670 colorbar test, <code>SW[9]</code>=FPGA test pattern.</p>
+        </div>
+
+        <div class="card">
+          <span class="label mono">rtl/clk_wiz_main.v</span>
+          <h4>MMCM Wrapper</h4>
+          <p style="font-size: 14px;">100 MHz → 25 MHz (VGA pixel clock) + 24 MHz (camera XCLK). VCO runs at 1200 MHz; CLKOUT0 ÷48 = 25 MHz, CLKOUT1 ÷50 = 24 MHz. Outputs <code>LOCKED</code> signal to hold design in reset until clocks are stable.</p>
+        </div>
+
+        <div class="card">
+          <span class="label mono">rtl/cam_config.v</span>
+          <h4>77-entry SCCB ROM</h4>
+          <p style="font-size: 14px;">Sequentially walks a 77-register ROM at start-up. Sets <code>COM7=0x04</code> (RGB output), <code>COM15=0xD0</code> (RGB565 full swing), AWB, and gamma registers. Waits for <code>done</code> from <code>sccb_master</code> before advancing to the next entry.</p>
+        </div>
+
+        <div class="card">
+          <span class="label mono">rtl/sccb_master.v</span>
+          <h4>7-state Open-drain FSM</h4>
+          <p style="font-size: 14px;">States: <code>S_IDLE→S_START→S_LOW→S_HIGH→S_STOP_A→S_STOP_B→S_STOP_C</code>. Sends 27 bits (3 × 8-bit payload + DC bit per byte). Bus is open-drain: drive 0 or release to Z. <code>HALF_PER_CYCLES=128</code> → ~49 kHz SCL.</p>
+          <div style="margin-top: 12px; border: 1px solid var(--rule); font-family: 'JetBrains Mono', monospace; font-size: 11px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; background: var(--bg-2); padding: 6px 10px; color: var(--phosphor); letter-spacing: 0.08em; text-transform: uppercase;">
+              <span>State</span><span>SCL</span><span>SDA action</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 6px 10px; border-top: 1px solid var(--rule);"><span>S_IDLE</span><span>H</span><span>H (float)</span></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 6px 10px; border-top: 1px solid var(--rule);"><span>S_START</span><span>H</span><span>H→L</span></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 6px 10px; border-top: 1px solid var(--rule);"><span>S_LOW</span><span>L</span><span>shift bit out</span></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 6px 10px; border-top: 1px solid var(--rule);"><span>S_HIGH</span><span>H</span><span>hold data</span></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 6px 10px; border-top: 1px solid var(--rule);"><span>S_STOP_A</span><span>L</span><span>L</span></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 6px 10px; border-top: 1px solid var(--rule);"><span>S_STOP_B</span><span>H</span><span>L</span></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 6px 10px; border-top: 1px solid var(--rule);"><span>S_STOP_C</span><span>H</span><span>H (float)</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <span class="label mono">rtl/cam_capture.v</span>
+          <h4>RGB565 → YCbCr Capture</h4>
+          <p style="font-size: 14px;">Pairs two incoming bytes (b1 + d_in) to reconstruct RGB565. Computes <code>Y8=(77R+150G+29B)&gt;&gt;8</code>. Quantizes Cb/Cr to 2-bit bins using thresholds −48/0/+48. Writes luma every pixel, chroma only on even columns (4:2:2).</p>
+        </div>
+
+        <div class="card">
+          <span class="label mono">rtl/frame_buffer.v</span>
+          <h4>Split Dual-clock BRAM</h4>
+          <p style="font-size: 14px;"><code>luma_mem[307200]×3b</code> + <code>chroma_mem[153600]×4b</code>. Write port clocked at cam_pclk 24 MHz; read port at clk_25. Chroma address = <code>wr_addr[18:1]</code> for 4:2:2 column sharing between odd and even pixels.</p>
+        </div>
+
+        <div class="card">
+          <span class="label mono">rtl/ycbcr_to_rgb444.v</span>
+          <h4>Bayer Dither + LUT Decode</h4>
+          <p style="font-size: 14px;">2×2 Bayer dither: <code>(h_pos XOR v_pos)</code> → dither bit appended to Y3 → Y4. Case-statement LUTs give r_off/b_off/g_off for each Cb2/Cr2 bin. Output clamped to 4-bit RGB444.</p>
+        </div>
+
+        <div class="card">
+          <span class="label mono">rtl/filter_pipeline.v</span>
+          <h4>4-mode Filter Mux</h4>
+          <p style="font-size: 14px;"><code>2'b00</code>=RAW (ycbcr_to_rgb444 direct), <code>2'b01</code>=INVERT (~raw), <code>2'b10</code>=COLOR ISO (zero non-selected channels), <code>2'b11</code>=EDGE (line_buffer3 + filter_edge Sobel). All paths registered 2 cycles for alignment.</p>
+        </div>
+
+        <div class="card">
+          <span class="label mono">rtl/line_buffer3.v</span>
+          <h4>3-row Circular Buffer</h4>
+          <p style="font-size: 14px;">Three WIDTH×3b distributed RAMs rotating per row. <code>bot_r</code> is forwarded directly from <code>pix_in</code> to avoid write-before-read hazard on the current row. Produces a 3×3 window: rows (h−2, h−1, h) × columns (top, mid, bot).</p>
+        </div>
+
+        <div class="card">
+          <span class="label mono">rtl/filter_edge.v</span>
+          <h4>Sobel L1 Edge Detector</h4>
+          <p style="font-size: 14px;"><code>Gx = right_col − left_col</code>, <code>Gy = bot_row − top_row</code>. Magnitude = |Gx|+|Gy| (L1 norm, 7-bit). Outputs <code>12'hFFF</code> if magnitude &gt; threshold AND not on horizontal/vertical edge border, else <code>12'h000</code>.</p>
+        </div>
+
+        <div class="card">
+          <span class="label mono">rtl/vga_timing.v</span>
+          <h4>VESA 640×480@60 Hz</h4>
+          <p style="font-size: 14px;"><code>H_TOTAL=800, V_TOTAL=521</code>. Read address is combinational; mirrors horizontally via <code>639−h_count</code>. <code>line_base</code> counts DOWN for vertical flip. 3-cycle prefetch pipeline (PIPE=3) aligns BRAM data with active_video.</p>
+        </div>
+
+        <div class="card">
+          <span class="label mono">rtl/debouncer.v</span>
+          <h4>20-bit Stable Counter</h4>
+          <p style="font-size: 14px;">Two-FF synchronizer followed by a 2²⁰-cycle stability counter. Input must hold steady for ~42 ms at 25 MHz before the output updates. Suppresses all mechanical contact bounce.</p>
+        </div>
+
+        <div class="card">
+          <span class="label mono">rtl/cdc_pulse_sync.v</span>
+          <h4>Toggle-flop CDC</h4>
+          <p style="font-size: 14px;">Toggle flop in source domain → 3-FF synchronizer in destination domain → edge detect to recreate pulse. <code>ASYNC_REG</code> attribute keeps synchronizer flops in the same slice to minimize metastability window.</p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SIMULATION -->
+<section id="simulation">
+  <div class="two-col">
+    <div class="side">
+      <h3>§11 · Simulation &amp; Testbenches</h3>
+      <small class="label">Verify before you synthesize</small>
+    </div>
+    <div>
+      <h2 class="display">Six testbenches.<br/>All passing.</h2>
+      <p class="lead" style="margin-top: 24px;">
+        Every critical module has an Icarus Verilog testbench. The rubric awards 5 points for comprehensive testbenches with waveforms showing correct behavior.
+      </p>
+
+      <div class="comp-table" style="grid-template-columns: 1fr 1fr 1fr 120px; margin-top: 32px;">
+        <div class="head">Testbench</div>
+        <div class="head">Module Under Test</div>
+        <div class="head">Key Checks</div>
+        <div class="head">Result</div>
+
+        <div class="row-label mono">tb_vga_timing.v</div>
+        <div>vga_timing.v</div>
+        <div style="font-size: 13px;">h_count 0..799, v_count 0..520, hsync polarity [656..751], vsync [490..491], active_video bounds, rd_addr gated in blanking</div>
+        <div><span class="crt-text mono" style="font-size: 12px;">PASS</span></div>
+
+        <div class="row-label mono">tb_sccb_master.v</div>
+        <div>sccb_master.v</div>
+        <div style="font-size: 13px;">START condition, 27 SCL rises, STOP condition, done×1, busy clears</div>
+        <div><span class="crt-text mono" style="font-size: 12px;">PASS</span></div>
+
+        <div class="row-label mono">tb_frame_buffer.v</div>
+        <div>frame_buffer.v</div>
+        <div style="font-size: 13px;">Luma R/W at 5 addresses, chroma 4:2:2 sharing (even addr=odd addr for chroma), wr_chroma_en gating</div>
+        <div><span class="crt-text mono" style="font-size: 12px;">PASS</span></div>
+
+        <div class="row-label mono">tb_filter_pipeline.v</div>
+        <div>filter_pipeline + ycbcr_to_rgb444 + line_buffer3 + filter_edge</div>
+        <div style="font-size: 13px;">RAW non-zero, INVERT=~RAW, ISO_R G/B=0, ISO_G R/B=0, ISO_B R/G=0, EDGE flat-field=000</div>
+        <div><span class="crt-text mono" style="font-size: 12px;">PASS</span></div>
+
+        <div class="row-label mono">tb_edge.v</div>
+        <div>edge_unit.v</div>
+        <div style="font-size: 13px;">≥2 edge pulses on brightness ramp 0→C→0, no pulses during blanking</div>
+        <div><span class="crt-text mono" style="font-size: 12px;">PASS</span></div>
+
+        <div class="row-label mono">tb_sobel.v</div>
+        <div>sobel_edge_filter.v</div>
+        <div style="font-size: 13px;">≥1 edge on 6×6 step-edge image (left=dark, right=bright)</div>
+        <div><span class="crt-text mono" style="font-size: 12px;">PASS</span></div>
+      </div>
+
+      <h4 style="margin-top: 48px;">Compile &amp; run commands</h4>
+<pre>
+# Compile
+iverilog -g2012 -o sim/tb_vga_timing.vvp     sim/tb_vga_timing.v     rtl/vga_timing.v
+iverilog -g2012 -o sim/tb_sccb_master.vvp    sim/tb_sccb_master.v    rtl/sccb_master.v
+iverilog -g2012 -o sim/tb_frame_buffer.vvp   sim/tb_frame_buffer.v   rtl/frame_buffer.v
+iverilog -g2012 -o sim/tb_filter_pipeline.vvp sim/tb_filter_pipeline.v \
+    rtl/filter_pipeline.v rtl/ycbcr_to_rgb444.v rtl/line_buffer3.v rtl/filter_edge.v
+iverilog -g2012 -o sim/tb_edge.vvp  sim/tb_edge.v  sim/edge_unit.v
+iverilog -g2012 -o sim/tb_sobel.vvp sim/tb_sobel.v sources_1/new/sobel_edge_filter.v
+
+# Run all
+for tb in tb_vga_timing tb_sccb_master tb_frame_buffer tb_filter_pipeline tb_edge tb_sobel; do
+    echo "--- $tb ---" &amp;&amp; vvp sim/$tb.vvp
+done
+</pre>
+
+      <p style="margin-top: 16px;">Each testbench writes a <code>.vcd</code> file to <code>sim/</code> (e.g. <code>sim/vga_timing.vcd</code>). Open with GTKWave to inspect signal waveforms.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CHALLENGES -->
+<section id="challenges">
+  <div class="two-col">
+    <div class="side">
+      <h3>§12 · Challenges</h3>
+      <small class="label">What went wrong, and why</small>
+    </div>
+    <div>
+      <h2 class="display">Eight hard things.</h2>
+      <p class="lead" style="margin-top: 24px;">
+        The problems that required the most iteration, debugging time, or architectural rethinking.
+      </p>
+
+      <div class="card-grid" style="margin-top: 32px;">
+
+        <div class="card">
+          <span class="label">01 · Camera bring-up</span>
+          <h4>OV7670 power-up timing</h4>
+          <p style="font-size: 14px;">Reset hold time, post-reset wait, and per-register SCCB gap all need careful tuning. The sensor silently ignores writes or boots into the wrong output format if timing is even slightly off.</p>
+        </div>
+
+        <div class="card">
+          <span class="label">02 · Memory</span>
+          <h4>The BRAM wall</h4>
+          <p style="font-size: 14px;">640×480 RGB565 = 4.9 Mbits; the chip has 1.84 Mbits. We had to commit to YCbCr 4:2:2 with Y3+Cb2+Cr2 = 5 bpp (1.54 Mbits) before any feature work could begin.</p>
+        </div>
+
+        <div class="card">
+          <span class="label">03 · Clocks</span>
+          <h4>Clock Domain Crossing</h4>
+          <p style="font-size: 14px;">Two asynchronous domains (24 MHz camera, 25 MHz VGA) plus the PCLK input. CDC was confined to the dual-port BRAM boundary and a dedicated <code>cdc_pulse_sync</code> module to avoid metastability.</p>
+        </div>
+
+        <div class="card">
+          <span class="label">04 · Color bug</span>
+          <h4>Green tint</h4>
+          <p style="font-size: 14px;">Chroma decoder bin-1 had a non-zero offset, so every neutral gray appeared green. Fixed by making the LUT antisymmetric: bin-1 = 0 offset in all four tables (r_off, b_off, gOffCr, gOffCb).</p>
+        </div>
+
+        <div class="card">
+          <span class="label">05 · Pipeline</span>
+          <h4>Pixel alignment (right-shift bug)</h4>
+          <p style="font-size: 14px;">Pipeline depth was 4 cycles, so the picture appeared shifted 4 columns right. Fixed by removing redundant register stages to reach the correct 2-cycle depth.</p>
+        </div>
+
+        <div class="card">
+          <span class="label">06 · Dual codebase</span>
+          <h4>320 vs 640 code split</h4>
+          <p style="font-size: 14px;">Both resolution paths live in the same repo with different storage schemes. Keeping both in sync during architectural refactors was non-trivial.</p>
+        </div>
+
+        <div class="card">
+          <span class="label">07 · Quantization</span>
+          <h4>Sobel on 3-bit luma</h4>
+          <p style="font-size: 14px;">Coarse quantization makes threshold tuning critical. Adding a Bayer dither bit (Y3→Y4 before filtering) significantly recovered fine-detail discrimination.</p>
+        </div>
+
+        <div class="card">
+          <span class="label">08 · Routing</span>
+          <h4>PCLK routing</h4>
+          <p style="font-size: 14px;">Pin A16 is not a dedicated clock pin. Vivado rejects the placement by default. Required <code>CLOCK_DEDICATED_ROUTE FALSE</code> as an XDC override. It works at 24 MHz on this small design, but would not scale to higher frequencies.</p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- AI USAGE -->
+<section id="ai-usage">
+  <div class="two-col">
+    <div class="side">
+      <h3>§13 · AI Usage Declaration</h3>
+      <small class="label">Required pass/fail rubric item</small>
+    </div>
+    <div>
+      <h2 class="display">What the AI did.<br/>What we did.</h2>
+      <p class="lead" style="margin-top: 24px;">
+        This project used <strong>Claude Code CLI</strong> as an AI coding assistant. The following declaration covers all AI-assisted work.
+      </p>
+
+      <div class="card-grid" style="margin-top: 32px;">
+
+        <div class="card">
+          <span class="label" style="color: var(--phosphor);">AI-assisted tasks</span>
+          <h4>What Claude Code was used for</h4>
+          <ul style="list-style: none; padding-left: 0; font-size: 14px;">
+            <li style="margin-bottom: 8px;">— Verilog module drafting: SCCB FSM, BT.601 luma math, chroma quantizer, 3-row line buffer, VGA timing generator</li>
+            <li style="margin-bottom: 8px;">— Testbench generation for all six simulation testbenches</li>
+            <li style="margin-bottom: 8px;">— Report and interactive documentation drafting</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <span class="label" style="color: var(--amber);">Human-only tasks</span>
+          <h4>NOT done by AI</h4>
+          <ul style="list-style: none; padding-left: 0; font-size: 14px;">
+            <li style="margin-bottom: 8px;">— Hardware bring-up and power-up sequence debugging</li>
+            <li style="margin-bottom: 8px;">— Oscilloscope signal tracing and PCLK routing verification</li>
+            <li style="margin-bottom: 8px;">— Pin mapping verification against physical Pmod layout</li>
+            <li style="margin-bottom: 8px;">— Edge threshold tuning on real hardware</li>
+            <li style="margin-bottom: 8px;">— Final architectural decisions: YCbCr storage scheme, bit-depth choices, dither implementation</li>
+          </ul>
+        </div>
+
+      </div>
+
+      <p style="margin-top: 24px;">All AI-generated code was <strong>inspected, edited, and validated</strong> on hardware (Basys 3 + OV7670) and in simulation (Icarus Verilog) by the team before being committed to the repository.</p>
+    </div>
+  </div>
+</section>
+
+<!-- GLOSSARY -->
+<section id="glossary">
+  <div class="two-col">
+    <div class="side">
+      <h3>§14 · Glossary</h3>
+      <small class="label">Acronyms decoded</small>
+    </div>
+    <div>
+      <h2 class="display">If a word looked alien.</h2>
+      <dl class="glossary" style="margin-top: 32px;">
+        <dt>FPGA</dt><dd>Field-Programmable Gate Array. A chip whose internal wiring you reconfigure with code. Different from a CPU — there's no instruction stream; the code becomes <em>actual hardware</em>.</dd>
+        <dt>Verilog</dt><dd>The hardware-description language used to write that "code." Looks vaguely like C; behaves like a circuit diagram.</dd>
+        <dt>BRAM</dt><dd>Block RAM. Dedicated on-chip memory blocks. Fast, fixed sizes, limited quantity (50 tiles on this board).</dd>
+        <dt>Pmod</dt><dd>A 12-pin header standard on Digilent boards for plugging in peripheral modules like cameras.</dd>
+        <dt>VGA</dt><dd>The blue-connector display standard from the 90s. Three analog channels (R/G/B) plus two sync pulses (HSYNC/VSYNC). Still ubiquitous.</dd>
+        <dt>RGB565</dt><dd>16-bit color: 5 bits red, 6 bits green, 5 bits blue. The OV7670's default output format.</dd>
+        <dt>RGB444</dt><dd>12-bit color: 4 bits per channel. What the Basys 3's resistor-ladder VGA DAC supports.</dd>
+        <dt>YCbCr</dt><dd>A color encoding that separates luminance (Y) from chrominance (Cb, Cr). Lets you compress color much more than brightness — which matches how human vision works.</dd>
+        <dt>4:2:2</dt><dd>Chroma subsampling ratio: full-resolution Y, half-horizontal-resolution Cb and Cr. Same trick as DV, MPEG, HDMI 4:2:2.</dd>
+        <dt>SCCB</dt><dd>Serial Camera Control Bus. OmniVision's nearly-but-not-quite I²C, used to configure the OV7670.</dd>
+        <dt>HREF / VSYNC</dt><dd>Horizontal Reference / Vertical Sync. The camera's sync pulses telling you "pixels in this row are valid" and "new frame starts now."</dd>
+        <dt>PCLK</dt><dd>Pixel Clock — the camera tells the FPGA "here's a new pixel byte" by toggling this line.</dd>
+        <dt>MMCM</dt><dd>Mixed-Mode Clock Manager. The Xilinx primitive that multiplies/divides clocks. We use it to make 25 MHz and 24 MHz from 100 MHz.</dd>
+        <dt>CDC</dt><dd>Clock Domain Crossing. Moving signals safely between two unrelated clocks. Done wrong, you get random metastability bugs.</dd>
+        <dt>Sobel</dt><dd>A 3×3 image kernel for edge detection. Computes brightness gradients in X and Y, sums their magnitudes.</dd>
+        <dt>Bayer dither</dt><dd>A cheap pattern (here, 2×2 checkerboard) for reducing visible banding when you truncate bits. The eye averages it out.</dd>
+        <dt>Quantization</dt><dd>Reducing precision. 8-bit → 3-bit means 256 levels become 8 levels. Information is lost; the trick is to lose what doesn't matter.</dd>
+        <dt>L1 magnitude</dt><dd>|Gx| + |Gy|. The cheap version of "vector length." Real length is √(Gx² + Gy²) but that needs a multiplier and square root we don't have time for at 25 MHz per pixel.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div>
+    <strong style="color: var(--phosphor);">Field manual</strong> · Real-Time Video Capture and Processing on Basys 3 + OV7670 · HW Synthesis Lab I 2025/2 · Final Project
+  </div>
+  <div>SIG/OK · 25.000 MHz · END OF FILE</div>
+</footer>
+
+<script>
+// ====================================================
+// BRAM budget chart
+// ====================================================
+const limit = 1.84; // Mbits
+const budget = [
+  { name: 'RGB444',                bits: 3.69, fits: false },
+  { name: 'RGB332',                bits: 2.46, fits: false },
+  { name: 'YCbCr 4:2:2 (Y3+CbCr2)', bits: 1.54, fits: true  },
+  { name: 'Y3 only (mono)',         bits: 0.92, fits: true  },
+];
+const bramChart = document.getElementById('bram-chart');
+const maxBits = Math.max(...budget.map(b => b.bits)) * 1.05;
+budget.forEach(b => {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const widthPct = (b.bits / maxBits) * 100;
+  const limitPct = (limit / maxBits) * 100;
+  row.innerHTML = `
+    <div class="name">${b.name}</div>
+    <div class="bar">
+      <div class="fill ${b.fits ? '' : 'over'}" data-w="${widthPct}"></div>
+      <div class="limit-line" style="right:${100 - limitPct}%"></div>
+    </div>
+    <div class="verdict ${b.fits ? 'fits' : 'over'}">${b.bits.toFixed(2)} Mb · ${b.fits ? 'FITS' : 'OVER'}</div>
+  `;
+  bramChart.appendChild(row);
+});
+// trigger animation when in view
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.querySelectorAll('.fill').forEach(f => {
+        f.style.width = f.dataset.w + '%';
+      });
+      obs.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.3 });
+obs.observe(bramChart);
+
+// ====================================================
+// RGB → YCbCr converter
+// ====================================================
+const r = document.getElementById('r-slider');
+const g = document.getElementById('g-slider');
+const b = document.getElementById('b-slider');
+const rgbSwatch = document.getElementById('rgb-swatch');
+const yccSwatch = document.getElementById('ycbcr-swatch');
+
+function quantBin(diff) {
+  if (diff < -48) return 0;
+  if (diff < 0)   return 1;
+  if (diff < 48)  return 2;
+  return 3;
+}
+const rOff = [-3, 0, 2, 3];
+const bOff = [-3, 0, 2, 3];
+const gOffCr = [2, 0, -2, -2];
+const gOffCb = [1, 0, -1, -1];
+
+function clamp4(v) { return Math.max(0, Math.min(15, v)); }
+
+function update() {
+  const R = +r.value, G = +g.value, B = +b.value;
+  document.getElementById('r-val').textContent = R;
+  document.getElementById('g-val').textContent = G;
+  document.getElementById('b-val').textContent = B;
+  rgbSwatch.style.background = `rgb(${R},${G},${B})`;
+
+  const Y8 = (77*R + 150*G + 29*B) >> 8;
+  const cbRaw = B - Y8;
+  const crRaw = R - Y8;
+  const cbBin = quantBin(cbRaw);
+  const crBin = quantBin(crRaw);
+  const Y3 = Y8 >> 5;
+
+  document.getElementById('y8-val').textContent = Y8;
+  document.getElementById('cbraw-val').textContent = cbRaw;
+  document.getElementById('crraw-val').textContent = crRaw;
+  document.getElementById('cb-bin').textContent = cbBin;
+  document.getElementById('cr-bin').textContent = crBin;
+  document.getElementById('y3-val').textContent = Y3 + ' (' + Y3.toString(2).padStart(3,'0') + ')';
+  document.getElementById('cb2-val').textContent = cbBin + ' (' + cbBin.toString(2).padStart(2,'0') + ')';
+  document.getElementById('cr2-val').textContent = crBin + ' (' + crBin.toString(2).padStart(2,'0') + ')';
+
+  // Decode for swatch (with dither bit = 0)
+  const y4 = Y3 << 1;
+  const R4 = clamp4(y4 + rOff[crBin]);
+  const G4 = clamp4(y4 + gOffCr[crBin] + gOffCb[cbBin]);
+  const B4 = clamp4(y4 + bOff[cbBin]);
+  // expand 4-bit to 8-bit
+  const R8 = (R4 << 4) | R4;
+  const G8 = (G4 << 4) | G4;
+  const B8 = (B4 << 4) | B4;
+  yccSwatch.style.background = `rgb(${R8},${G8},${B8})`;
+}
+r.addEventListener('input', update);
+g.addEventListener('input', update);
+b.addEventListener('input', update);
+update();
+
+// ====================================================
+// FILTER DEMO — synthetic frame on a canvas
+// ====================================================
+const cSrc = document.getElementById('canvas-src');
+const cOut = document.getElementById('canvas-out');
+const ctxS = cSrc.getContext('2d');
+const ctxO = cOut.getContext('2d');
+const W = cSrc.width, H = cSrc.height;
+
+function drawSrc() {
+  // Synthetic scene: gradient sky, sun disc, geometric shapes, color blocks
+  const grd = ctxS.createLinearGradient(0, 0, 0, H);
+  grd.addColorStop(0, '#1d4068'); grd.addColorStop(0.5, '#cf6a3a'); grd.addColorStop(1, '#3a2920');
+  ctxS.fillStyle = grd; ctxS.fillRect(0, 0, W, H);
+  // sun
+  const rad = ctxS.createRadialGradient(220, 80, 8, 220, 80, 60);
+  rad.addColorStop(0, '#ffeac6'); rad.addColorStop(1, 'rgba(255,234,198,0)');
+  ctxS.fillStyle = rad; ctxS.fillRect(0, 0, W, H);
+  ctxS.fillStyle = '#fff5d6'; ctxS.beginPath(); ctxS.arc(220, 80, 18, 0, Math.PI*2); ctxS.fill();
+  // mountain triangles (dark)
+  ctxS.fillStyle = '#1a1f1a';
+  ctxS.beginPath(); ctxS.moveTo(0, 180); ctxS.lineTo(100, 110); ctxS.lineTo(180, 180); ctxS.closePath(); ctxS.fill();
+  ctxS.beginPath(); ctxS.moveTo(120, 180); ctxS.lineTo(200, 130); ctxS.lineTo(280, 180); ctxS.closePath(); ctxS.fill();
+  // colored squares (test palette)
+  const colors = ['#e63946', '#2a9d8f', '#3a86ff', '#ffbe0b', '#8338ec', '#fb5607'];
+  colors.forEach((c, i) => {
+    ctxS.fillStyle = c;
+    ctxS.fillRect(8 + i*52, 195, 38, 38);
+  });
+  // text label (acts as edges for sobel)
+  ctxS.fillStyle = '#000'; ctxS.font = 'bold 18px monospace'; ctxS.fillText('OV7670', 12, 30);
+  ctxS.fillStyle = '#fff'; ctxS.font = 'bold 18px monospace'; ctxS.fillText('OV7670', 14, 30);
+}
+drawSrc();
+
+let mode = 'raw', isoCh = 'r', threshold = 8;
+function applyFilter() {
+  const src = ctxS.getImageData(0, 0, W, H);
+  const dst = ctxO.createImageData(W, H);
+  const sd = src.data, dd = dst.data;
+  if (mode === 'raw') {
+    dd.set(sd);
+  } else if (mode === 'invert') {
+    for (let i = 0; i < sd.length; i += 4) {
+      dd[i] = 255 - sd[i]; dd[i+1] = 255 - sd[i+1]; dd[i+2] = 255 - sd[i+2]; dd[i+3] = 255;
+    }
+  } else if (mode === 'iso') {
+    for (let i = 0; i < sd.length; i += 4) {
+      dd[i]   = isoCh === 'r' ? sd[i]   : 0;
+      dd[i+1] = isoCh === 'g' ? sd[i+1] : 0;
+      dd[i+2] = isoCh === 'b' ? sd[i+2] : 0;
+      dd[i+3] = 255;
+    }
+  } else if (mode === 'edge') {
+    // Compute luma, then 3x3 Sobel
+    const lum = new Uint8ClampedArray(W * H);
+    for (let i = 0, j = 0; i < sd.length; i += 4, j++) {
+      lum[j] = (77*sd[i] + 150*sd[i+1] + 29*sd[i+2]) >> 8;
+    }
+    const T = threshold * 12; // scale 0..15 → reasonable threshold
+    for (let y = 1; y < H-1; y++) {
+      for (let x = 1; x < W-1; x++) {
+        const o = y*W + x;
+        const tl = lum[o-W-1], tc = lum[o-W], tr = lum[o-W+1];
+        const ml = lum[o-1],                    mr = lum[o+1];
+        const bl = lum[o+W-1], bc = lum[o+W], br = lum[o+W+1];
+        const gx = -tl + tr - 2*ml + 2*mr - bl + br;
+        const gy = -tl - 2*tc - tr + bl + 2*bc + br;
+        const mag = Math.abs(gx) + Math.abs(gy);
+        const v = mag > T ? 255 : 0;
+        const k = o * 4;
+        dd[k] = dd[k+1] = dd[k+2] = v; dd[k+3] = 255;
+      }
+    }
+  }
+  ctxO.putImageData(dst, 0, 0);
+}
+applyFilter();
+
+document.querySelectorAll('.filter-demo .controls button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-demo .controls button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    mode = btn.dataset.mode;
+    document.getElementById('out-label').textContent = btn.textContent.split('·')[1].trim();
+    document.querySelector('.threshold-row').classList.toggle('show', mode === 'edge');
+    document.querySelector('.iso-row').classList.toggle('show', mode === 'iso');
+    applyFilter();
+  });
+});
+document.querySelectorAll('.iso-row button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.iso-row button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    isoCh = btn.dataset.iso;
+    applyFilter();
+  });
+});
+document.getElementById('thresh-slider').addEventListener('input', e => {
+  threshold = +e.target.value;
+  document.getElementById('thresh-val').textContent = threshold;
+  applyFilter();
+});
+
+// ====================================================
+// SWITCH MAP
+// ====================================================
+const swMap = document.getElementById('sw-map');
+const swReadout = document.getElementById('sw-readout');
+const swState = new Array(16).fill(false);
+const swMeta = [
+  { i: 0,  fn: 'mode lo'    }, { i: 1,  fn: 'mode hi'    },
+  { i: 2,  fn: 'iso lo'     }, { i: 3,  fn: 'iso hi'     },
+  { i: 4,  fn: 'thr [0]'    }, { i: 5,  fn: 'thr [1]'    }, { i: 6,  fn: 'thr [2]'    }, { i: 7,  fn: 'thr [3]'    },
+  { i: 8,  fn: 'OV color'   }, { i: 9,  fn: 'FPGA bars'  },
+  { i: 10, fn: '—'          }, { i: 11, fn: '—'          },
+  { i: 12, fn: '—'          }, { i: 13, fn: '—'          },
+  { i: 14, fn: '—'          }, { i: 15, fn: '—'          },
+];
+// SW[15]..SW[0] left to right
+for (let i = 15; i >= 0; i--) {
+  const meta = swMeta[i];
+  const cell = document.createElement('div');
+  cell.className = 'sw-cell';
+  cell.dataset.i = i;
+  cell.innerHTML = `<div class="pin"></div><div class="nm">SW${i}</div><div class="nm" style="color:var(--phosphor-dim)">${meta.fn}</div>`;
+  cell.addEventListener('click', () => {
+    swState[i] = !swState[i];
+    cell.classList.toggle('up', swState[i]);
+    updateSwReadout();
+  });
+  swMap.appendChild(cell);
+}
+function updateSwReadout() {
+  const mode = (swState[1] ? 2 : 0) | (swState[0] ? 1 : 0);
+  const iso  = (swState[3] ? 2 : 0) | (swState[2] ? 1 : 0);
+  const thr  = (swState[7] ? 8 : 0) | (swState[6] ? 4 : 0) | (swState[5] ? 2 : 0) | (swState[4] ? 1 : 0);
+  const modeName = ['RAW (00)', 'INVERT (01)', 'COLOR ISO (10)', 'EDGE (11)'][mode];
+  const isoName  = ['RED', 'GREEN', 'BLUE', 'RED'][iso];
+  let extra = '';
+  if (mode === 3) extra = `<div class="line"><span class="key">edge threshold</span><span class="val">${thr} / 15</span></div>`;
+  if (mode === 2) extra = `<div class="line"><span class="key">isolated channel</span><span class="val">${isoName}</span></div>`;
+  let lines = `
+    <div class="line"><span class="key">filter mode</span><span class="val">${modeName}</span></div>
+    ${extra}
+    <div class="line"><span class="key">SW[8] OV7670 color-bar</span><span class="val">${swState[8] ? 'ON' : 'off'}</span></div>
+    <div class="line"><span class="key">SW[9] FPGA test pattern</span><span class="val">${swState[9] ? 'ON' : 'off'}</span></div>
+  `;
+  swReadout.innerHTML = lines;
+}
+updateSwReadout();
+</script>
+</body>
+</html>

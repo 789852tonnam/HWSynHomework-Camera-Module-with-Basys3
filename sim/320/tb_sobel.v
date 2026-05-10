@@ -39,7 +39,7 @@ module tb_sobel;
     endtask
 
     initial begin
-        $dumpfile("sim/sobel.vcd");
+        $dumpfile("sim/320/sobel.vcd");
         $dumpvars(0, tb_sobel);
 
         repeat (2) @(posedge clk);
