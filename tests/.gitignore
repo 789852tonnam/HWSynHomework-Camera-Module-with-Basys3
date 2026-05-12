@@ -1,0 +1,4 @@
+sim_build_*/
+results.xml
+__pycache__/
+*.pyc

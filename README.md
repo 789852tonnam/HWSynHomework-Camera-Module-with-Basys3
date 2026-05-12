@@ -53,6 +53,23 @@ HW-SynLab2025-main/
 │   └── constraints_rtl.xdc            pin map for rtl (top)
 │
 ├── sim/                              iverilog testbenches (Sobel, edge module)
+├── tests/                            cocotb 2.x Python testbenches
+│   ├── 640/                           six DUT targets for the rtl/ path
+│   │   ├── test_cam_capture.py        cam_capture (YCbCr encode + pixel-skip)
+│   │   ├── test_vga_timing.py         vga_timing  (counters, sync, fetch_active)
+│   │   ├── test_filter_pipeline.py    filter_pipeline (RAW/INV/ISO/EDGE modes)
+│   │   ├── test_frame_buffer.py       frame_buffer (luma/chroma split BRAM)
+│   │   ├── test_sccb_master.py        sccb_master (FSM, busy/done, HALF_PER=4)
+│   │   ├── test_ycbcr_to_rgb444.py    ycbcr_to_rgb444 (LUT + clamp + dither)
+│   │   ├── run_tests.py               Python runner (no make required)
+│   │   └── Makefile                   make-based runner
+│   └── 320/                           four DUT targets for the sources_1/ path
+│       ├── test_camera_capture.py     camera_capture_640x320
+│       ├── test_vga_display.py        vga_640x320_display
+│       ├── test_frame_buffer.py       frame_buffer_640x320
+│       ├── test_sccb_config.py        sccb_config (8-register init sequence)
+│       ├── run_tests.py               Python runner
+│       └── Makefile
 ├── scripts/                          .tcl helpers for batch synth in Vivado
 ├── HW Synthesis Lab I 2025_2 - Final Project ... .pdf   the project brief
 └── basys3_rm-1525374-17687320973847.pdf                 Basys 3 reference manual
@@ -123,8 +140,8 @@ OV7670 (RGB565 @ pclk)
         v
   ┌── vga_640x320_display      640×480 @ 60 Hz; combinational frame_addr
   │     - h_cnt 0..799, v_cnt 0..524, hsync/vsync active-low
-  │     - HORIZONTAL UPSCALE: img_x = (h_cnt * 499) >> 10 + 8
-  │       (~h_cnt/2 with manual +8 alignment offset learned by experiment)
+  │     - HORIZONTAL UPSCALE: img_x = (h_cnt * 496) >> 10
+  │       (maps h_cnt 0..639 → img_x 0..309 for PIXEL_SKIP=20 / 310 valid cols)
   │     - VERTICAL UPSCALE: img_y = v_cnt >> 1   (line doubling)
   │     - active_d & pixel_x_d & pixel_y_d are all registered 1 cycle
   └── pixel_in (12-bit RGB444) → State machine
@@ -220,10 +237,10 @@ The LUT entries are tuned so that **bin-1 inputs (the bin a neutral pixel lands 
 
 | | bin 0 | bin 1 | bin 2 | bin 3 |
 | --- | --- | --- | --- | --- |
-| `r_off` (Cr→R) | −3 | 0 | +2 | +3 |
-| `b_off` (Cb→B) | −3 | 0 | +2 | +3 |
-| `g_off_cr` (Cr→G) | +2 | 0 | −2 | −2 |
-| `g_off_cb` (Cb→G) | +1 | 0 | −1 | −1 |
+| `r_off` (Cr→R) | −3 | −1 | +1 | +3 |
+| `b_off` (Cb→B) | −3 | −1 | +1 | +3 |
+| `g_off_cr` (Cr→G) | +2 | +1 | −1 | −2 |
+| `g_off_cb` (Cb→G) | +1 | 0 | 0 | −1 |
 
 The 2×2 Bayer dither is the standard cheap way to reduce posterization when bit-truncating: alternating ±0.5 LSB in a checkerboard makes the eye integrate to a smoother gradient instead of seeing flat steps.
 
@@ -249,24 +266,23 @@ This is the **single most error-prone aspect** of the 640 path. The depth from `
 | Stage | Cycles | Comment |
 | --- | --- | --- |
 | `rd_addr` from `h_count` | **0** | combinational in `vga_timing.v` (matches 320 path) |
-| `frame_buffer` BRAM read | 1 | always-1 for synchronous BRAM |
-| `filter_pipeline` output reg | 1 | mode mux + register |
-| **Total (RAW/INV/ISO)** | **2** | |
-| EDGE adds: `line_buffer3` registered window | +1 | filter_edge is combinational |
-| **Total (EDGE)** | **3** | 1-pixel mismatch vs. non-edge — `h_edge` blanking absorbs |
+| `frame_buffer` BRAM read | **1** | always-1 for synchronous BRAM |
+| `filter_pipeline` (all modes) | **2** | RAW/INV/ISO: `raw_d` latch + output reg; EDGE: `line_buffer3` + output reg |
+| **Total (all modes)** | **3** | latencies matched inside `filter_pipeline` so mode switch causes no H-shift |
 
-The `active_video` signal is therefore delayed **2 cycles** before gating the VGA output (`active_pipe[1]` in `top.v`). Earlier rebuilds had a 4-cycle pipeline (registered `rd_addr` + per-mode latency-match latches) and produced a visible 4-pixel rightward content shift — fixed by stripping out the redundant registers and matching the 320 path's combinational style.
+The `active_video` signal is therefore delayed **3 cycles** before gating the VGA output (`active_pipe[2]` in `top.v`). A 3-cycle pre-fetch window (`h_count` 797–799) issues `rd_addr` for the next line's first three pixels so `active_d` can rise cleanly at `h_count = 0`. Earlier rebuilds had a 4-cycle pipeline (registered `rd_addr` + per-mode latency-match latches) and produced a visible 4-pixel rightward content shift — fixed by stripping out the redundant registers and matching the 320 path's combinational style.
 
 ### 5.7 Geometric corrections (vga_timing.v)
 
 The OV7670 outputs frames in scan order with origin at the top-left of *its* sensor, which on this Pmod orientation comes out **upside-down and mirrored** relative to the VGA scanner. Two cheap fixes, both inside `rd_addr`:
 
 ```
-line_base counts DOWN from row 479 → row 0   (vertical flip)
-mirror_x = 639 - h_count + H_OFFSET           (horizontal mirror)
+line_base counts DOWN from row 479 → row 0          (vertical flip)
+h_scaled = floor(eff_h × 998 / 1024)                (scale 0..624 → 0..623 in VALID_COLS)
+mirror_x = (VALID_COLS − 1) − h_scaled              (horizontal mirror; coeff 998 = ⌊623×1024/639⌋)
 ```
 
-`line_base` is a running accumulator (subtract 640 each new line) — no multiplier inferred, just a 19-bit subtractor. `H_OFFSET` is a small per-board manual nudge to recover sub-pixel alignment after the mirror.
+`line_base` is a running accumulator (subtract 640 each new line) — no multiplier inferred, just a 19-bit subtractor. The coefficient 998 maps the 624 valid fb columns onto the 640 display columns with the horizontal mirror baked in. `eff_h` is `h_count + PIPE` during the active region and `h_count − PREFETCH_START` during the 3-cycle pre-fetch window.
 
 ---
 
@@ -333,12 +349,37 @@ The trap: reading **bottom-row column h** (== current `h_count`) from the same b
 3. Run synthesis → implementation → generate bitstream → program board.
 4. The `scripts/*.tcl` files automate parts of this for batch runs.
 
-### Simulation (iverilog, no Vivado)
-The rtl modules compile cleanly with `iverilog -g2012`:
-```
+### Simulation
+
+**iverilog (Verilog testbenches, `sim/`)**
+```bash
 iverilog -g2012 -o sim_top rtl/*.v
 ```
-Testbenches under `sim/` exercise the Sobel core (`tb_sobel.v`, `tb_edge.v`).
+Legacy Verilog testbenches under `sim/320/` and `sim/640/` cover the major sub-modules.
+
+**cocotb 2.x (Python testbenches, `tests/`)**
+Requires `cocotb >= 2.0` and `iverilog` on PATH.
+```bash
+# 640 path — six targets
+cd tests/640
+python run_tests.py                          # all six
+python run_tests.py cam_capture sccb_master  # subset
+# or via make: make cam_capture / make all
+
+# 320 path — four targets
+cd tests/320
+python run_tests.py                          # all four
+# or via make: make all
+```
+**640 targets:** `cam_capture`, `vga_timing`, `filter_pipeline`, `frame_buffer`, `sccb_master`, `ycbcr_to_rgb444`
+
+**320 targets:** `camera_capture`, `vga_display`, `frame_buffer`, `sccb_config`
+
+`sccb_master` is compiled with `HALF_PER_CYCLES=4` (instead of the default 128) so the simulation completes in ~250 cycles instead of ~7900.
+
+Each target rebuilds the DUT with icarus and runs the corresponding `test_*.py`.
+
+> **Windows note:** `run_tests.py` requires Python from [python.org](https://www.python.org/downloads/), not the Windows Store version. The Windows Store AppContainer sandbox prevents C-extension DLLs from loading when Python is embedded inside `vvp`. WSL works without modification.
 
 ### On-board sanity checks
 1. After programming, **LD[15]** (`cfg_done`) lights within ~1 second.
