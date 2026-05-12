@@ -24,7 +24,7 @@ module vga_640x320_display(
             h_cnt <= h_cnt + 1;
         end
 
-        active_d <= (h_cnt < 640 && v_cnt < 480);
+        active_d  <= (h_cnt < 640 && v_cnt < 480);
         pixel_x_d <= h_cnt;
         pixel_y_d <= v_cnt;
     end
@@ -33,16 +33,17 @@ module vga_640x320_display(
     assign vsync = (v_cnt >= 490 && v_cnt < 492) ? 0 : 1;
 
     wire display_area = (h_cnt < 640 && v_cnt < 480);
+    // (h_cnt*499)>>10 maps h_cnt=0..639 to img_x=0..311 (matches PIXEL_SKIP=16 camera window)
     wire [19:0] scaled_x = (h_cnt * 499) >> 10;
-    wire [9:0] img_x = scaled_x + 8;
-    wire [9:0] img_y = v_cnt >> 1;
+    wire [9:0]  img_x    = scaled_x[9:0];
+    wire [9:0]  img_y    = v_cnt >> 1;
 
     assign frame_addr = display_area ? (img_y * 320 + img_x) : 0;
-    assign active = active_d;
-    assign pixel_x = pixel_x_d;
-    assign pixel_y = pixel_y_d;
+    assign active     = active_d;
+    assign pixel_x    = pixel_x_d;
+    assign pixel_y    = pixel_y_d;
 
     assign vga_r = active_d ? pixel_in[11:8] : 4'h0;
-    assign vga_g = active_d ? pixel_in[7:4] : 4'h0;
-    assign vga_b = active_d ? pixel_in[3:0] : 4'h0;
+    assign vga_g = active_d ? pixel_in[7:4]  : 4'h0;
+    assign vga_b = active_d ? pixel_in[3:0]  : 4'h0;
 endmodule

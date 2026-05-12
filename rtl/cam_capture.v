@@ -11,8 +11,9 @@
 //   Cb2 = quantize(B8 - Y8) into 4 bins: 0(<-48), 1(-48..-1), 2(0..47), 3(>=48)
 //   Cr2 = quantize(R8 - Y8) into 4 bins: same thresholds
 //
-// Pipeline: b1 captured on byte 1, full RGB565 available on byte 2,
-// then YCbCr computed combinationally, outputs registered 1 cycle later.
+// PIXEL_SKIP camera pixels at the start of each HREF line are discarded
+// (OV7670 HREF startup glitch). fb[0] per row = first valid camera pixel.
+// PIXEL_SKIP must be even to preserve chroma phase alignment.
 
 module cam_capture #(
     parameter IMG_WIDTH  = 640,
@@ -36,29 +37,34 @@ module cam_capture #(
     wire _unused = &{1'b0, IMG_WIDTH[9:1], IMG_HEIGHT[9:1]};
     /* verilator lint_on UNUSED */
 
+    // Skip first N camera pixels per line (HREF startup glitch). Must be even.
+    // Tune upward if black/garbage visible on right side of display.
+    localparam [9:0] PIXEL_SKIP = 10'd16;
+    localparam [9:0] VALID_COLS = 10'd640 - PIXEL_SKIP;  // 624
+
     // -----------------------------------------------------------------
-    // Byte pairing (from 320 version — simple, proven correct)
+    // Byte pairing
     // -----------------------------------------------------------------
-    reg [7:0] b1;
-    reg       byte_sel;
-    reg       old_href;
-    reg [9:0] pxl_cnt;
-    reg [18:0] address;
-    reg        col_phase;   // 0 = even column (writes chroma)
+    reg [7:0]  b1;
+    reg        byte_sel;
+    reg        old_href;
+    reg [9:0]  pxl_cnt;
+    reg [18:0] row_base;   // base address of current fb row (0, 640, 1280, ...)
+    reg [9:0]  write_col;  // column index within row (0..VALID_COLS-1)
 
     initial begin
-        b1         = 8'd0;
-        byte_sel   = 1'b0;
-        old_href   = 1'b0;
-        pxl_cnt    = 10'd0;
-        address    = 19'd0;
-        col_phase  = 1'b0;
-        wr_addr    = 19'd0;
-        wr_luma    = 3'd0;
-        wr_chroma  = 4'd0;
-        wr_en      = 1'b0;
+        b1           = 8'd0;
+        byte_sel     = 1'b0;
+        old_href     = 1'b0;
+        pxl_cnt      = 10'd0;
+        row_base     = 19'd0;
+        write_col    = 10'd0;
+        wr_addr      = 19'd0;
+        wr_luma      = 3'd0;
+        wr_chroma    = 4'd0;
+        wr_en        = 1'b0;
         wr_chroma_en = 1'b0;
-        vsync_pulse = 1'b0;
+        vsync_pulse  = 1'b0;
     end
 
     // -----------------------------------------------------------------
@@ -70,7 +76,6 @@ module cam_capture #(
     wire [5:0] g6 = pix16[10:5];
     wire [4:0] b5 = pix16[4:0];
 
-    // Replicate top bits to extend to 8 bits (same trick as original)
     wire [7:0] r8 = {r5, r5[4:2]};
     wire [7:0] g8 = {g6, g6[5:4]};
     wire [7:0] b8 = {b5, b5[4:2]};
@@ -86,10 +91,6 @@ module cam_capture #(
 
     // -----------------------------------------------------------------
     // Chroma: signed B-Y and R-Y quantized into 4 bins
-    //   bin 0 : diff < -48   (strong deficit)
-    //   bin 1 : diff -48..-1 (mild deficit / neutral)
-    //   bin 2 : diff  0..47  (mild positive)
-    //   bin 3 : diff >= 48   (strong positive)
     // -----------------------------------------------------------------
     wire signed [9:0] y_s    = $signed({2'b0, y8});
     wire signed [9:0] b_s    = $signed({2'b0, b8});
@@ -106,7 +107,7 @@ module cam_capture #(
                      (diff_r >= -10'sd48) ? 2'd1 : 2'd0;
 
     // -----------------------------------------------------------------
-    // Posedge capture logic — mirrors 320 version structure exactly
+    // Capture logic
     // -----------------------------------------------------------------
     always @(posedge pclk_in) begin
         old_href    <= href;
@@ -114,39 +115,36 @@ module cam_capture #(
         wr_en       <= 1'b0;
 
         if (vsync) begin
-            // Frame reset
-            address    <= 19'd0;
-            pxl_cnt    <= 10'd0;
-            byte_sel   <= 1'b0;
-            col_phase  <= 1'b0;
+            pxl_cnt     <= 10'd0;
+            byte_sel    <= 1'b0;
+            write_col   <= 10'd0;
+            row_base    <= 19'd0;
             vsync_pulse <= 1'b1;
 
         end else if (href) begin
             if (byte_sel == 1'b0) begin
-                // First byte: store high byte
                 b1       <= d_in;
                 byte_sel <= 1'b1;
-                wr_en    <= 1'b0;
             end else begin
-                // Second byte: pixel complete -> write to frame buffer
-                wr_en        <= 1'b1;
-                wr_luma      <= y3;
-                wr_chroma    <= {cb2, cr2};
-                wr_chroma_en <= ~col_phase;   // chroma on even pixels
-                wr_addr      <= address;
-
-                address   <= address + 19'd1;
-                col_phase <= ~col_phase;
-                pxl_cnt   <= pxl_cnt + 10'd1;
-                byte_sel  <= 1'b0;
+                // Write valid pixels: skip first PIXEL_SKIP, cap at VALID_COLS per row
+                if (pxl_cnt >= PIXEL_SKIP && write_col < VALID_COLS) begin
+                    wr_en        <= 1'b1;
+                    wr_luma      <= y3;
+                    wr_chroma    <= {cb2, cr2};
+                    wr_chroma_en <= (write_col[0] == 1'b0);  // chroma on even write_col
+                    wr_addr      <= row_base + {9'd0, write_col};
+                    write_col    <= write_col + 10'd1;
+                end
+                pxl_cnt  <= pxl_cnt + 10'd1;
+                byte_sel <= 1'b0;
             end
 
         end else begin
-            // href low: end of line or blanking
-            wr_en    <= 1'b0;
-            pxl_cnt  <= 10'd0;
-            byte_sel <= 1'b0;   // CRITICAL: reset byte phase on line end
+            pxl_cnt   <= 10'd0;
+            byte_sel  <= 1'b0;
+            write_col <= 10'd0;
+            if (old_href == 1'b1)
+                row_base <= row_base + 19'd640;
         end
     end
-
 endmodule

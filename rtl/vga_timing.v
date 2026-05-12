@@ -89,16 +89,19 @@ module vga_timing (
         end
     end
     // -----------------------------------------------------------------
-    // rd_addr: simple combinational, matching 320 version's approach.
-    //   - Mirror horizontally: 639 - h_count  (fix left-right flip)
-    //   - H_OFFSET: manual alignment like 320's "+8"
-    //     (320 used +8 in 320px space; scaled to 640px = ~16)
+    // rd_addr: scaled mirror to match cam_capture PIXEL_SKIP=16.
+    //   cam_capture stores camera pixels 16..639 at fb cols 0..623.
+    //   Scale h_count=0..639 -> fb col 0..623, then mirror so left screen
+    //   shows rightmost valid camera pixel and right screen shows leftmost.
+    //   Coefficient 998 = floor(623 * 1024 / 639): ensures h_count=639 -> 623.
+    //   Must match PIXEL_SKIP in cam_capture.v.
     // -----------------------------------------------------------------
-    localparam [9:0] H_OFFSET = 10'd0;
+    localparam [9:0] PIXEL_SKIP = 10'd16;
+    localparam [9:0] VALID_COLS = 10'd640 - PIXEL_SKIP;  // 624
 
     wire in_active = (h_count < H_ACTIVE) && (v_count < V_ACTIVE);
-    wire [9:0] mirror_raw = 10'd639 - h_count + H_OFFSET;
-    wire [9:0] mirror_x   = (mirror_raw > 10'd639) ? 10'd639 : mirror_raw;
+    wire [19:0] h_scaled = ({10'd0, h_count} * 20'd998) >> 10;
+    wire [9:0]  mirror_x = (VALID_COLS - 10'd1) - h_scaled[9:0];
 
     assign rd_addr = in_active ? (line_base + {9'd0, mirror_x}) : 19'd0;
 
