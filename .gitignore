@@ -1,4 +1,5 @@
 # Synthesis and Simulation outputs
+*.vvp
 *.done
 *.jdi
 *.pin
