@@ -7,7 +7,7 @@ module camera_capture_640x320(
 );
     // Skip first PIXEL_SKIP camera pixels per line (OV7670 HREF startup garbage).
     // Must be even. Each unit = 1 camera pixel (2 bytes). Tune if black bar persists.
-    localparam [9:0] PIXEL_SKIP = 10'd16;
+    localparam [9:0] PIXEL_SKIP = 10'd20;
 
     reg [7:0]  b1;
     reg        byte_sel = 0;

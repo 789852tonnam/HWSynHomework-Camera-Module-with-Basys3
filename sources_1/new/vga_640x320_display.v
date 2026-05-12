@@ -33,8 +33,8 @@ module vga_640x320_display(
     assign vsync = (v_cnt >= 490 && v_cnt < 492) ? 0 : 1;
 
     wire display_area = (h_cnt < 640 && v_cnt < 480);
-    // (h_cnt*499)>>10 maps h_cnt=0..639 to img_x=0..311 (matches PIXEL_SKIP=16 camera window)
-    wire [19:0] scaled_x = (h_cnt * 499) >> 10;
+    // (h_cnt*496)>>10 maps h_cnt=0..639 to img_x=0..309 (PIXEL_SKIP=20 -> 310 valid fb cols)
+    wire [19:0] scaled_x = (h_cnt * 496) >> 10;
     wire [9:0]  img_x    = scaled_x[9:0];
     wire [9:0]  img_y    = v_cnt >> 1;
 

@@ -221,6 +221,7 @@ module top #(
     // -----------------------------------------------------------------
     wire [9:0]  h_count, v_count;
     wire        active_video;
+    wire        fetch_active;
 
     vga_timing u_vga (
         .clk          (clk_25),
@@ -230,6 +231,7 @@ module top #(
         .h_count      (h_count),
         .v_count      (v_count),
         .active_video (active_video),
+        .fetch_active (fetch_active),
         .rd_addr      (fb_rd_addr)
     );
 
@@ -266,9 +268,9 @@ module top #(
     reg [2:0] active_pipe;
     always @(posedge clk_25) begin
         if (sys_rst) active_pipe <= 3'd0;
-        else         active_pipe <= {active_pipe[1:0], active_video};
+        else         active_pipe <= {active_pipe[1:0], fetch_active};
     end
-    wire active_d = active_pipe[2];
+    wire active_d = active_pipe[2] && active_video;
 
     assign vga_r = active_d ? filter_out[11:8] : 4'h0;
     assign vga_g = active_d ? filter_out[7:4]  : 4'h0;
