@@ -25,7 +25,3 @@ hc_output/
 .Xil/
 vivado*.str
 vivado*.jou
-
-# cocotb simulation build dirs
-tests/640/sim_build_*/
-tests/320/sim_build_*/
