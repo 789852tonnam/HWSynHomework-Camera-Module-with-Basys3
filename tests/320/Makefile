@@ -1,5 +1,6 @@
 # cocotb testbenches — 320-path (sources_1/new/)
-# Usage: make <target>  where target is one of: camera_capture vga_display frame_buffer sccb_config all
+# Usage: make <target>  where target is one of:
+#   camera_capture vga_display frame_buffer sccb_config line_buffer3 filter_edge all
 #
 # Requirements: cocotb >= 2.0, iverilog on PATH.
 
@@ -12,7 +13,7 @@ SRC   := $(ROOT)/sources_1/new
 
 COCOTB_MK := $(shell cocotb-config --makefiles)/Makefile.sim
 
-.PHONY: camera_capture vga_display frame_buffer sccb_config all clean
+.PHONY: camera_capture vga_display frame_buffer sccb_config line_buffer3 filter_edge all clean
 
 camera_capture:
 	$(MAKE) -f $(COCOTB_MK) \
@@ -46,7 +47,24 @@ sccb_config:
 		VERILOG_SOURCES="$(SRC)/sccb_config.v" \
 		SIM_BUILD=sim_build_sccb_config
 
-all: camera_capture vga_display frame_buffer sccb_config
+line_buffer3:
+	$(MAKE) -f $(COCOTB_MK) \
+		SIM=$(SIM) TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
+		TOPLEVEL=line_buffer3 \
+		MODULE=test_line_buffer3 \
+		VERILOG_SOURCES="$(SRC)/line_buffer3.v" \
+		COMPILE_ARGS="-P line_buffer3.WIDTH=8" \
+		SIM_BUILD=sim_build_line_buffer3
+
+filter_edge:
+	$(MAKE) -f $(COCOTB_MK) \
+		SIM=$(SIM) TOPLEVEL_LANG=$(TOPLEVEL_LANG) \
+		TOPLEVEL=filter_edge \
+		MODULE=test_filter_edge \
+		VERILOG_SOURCES="$(SRC)/filter_edge.v" \
+		SIM_BUILD=sim_build_filter_edge
+
+all: camera_capture vga_display frame_buffer sccb_config line_buffer3 filter_edge
 
 clean:
 	rm -rf sim_build_* results.xml

@@ -7,7 +7,7 @@ Usage:
     python run_tests.py camera_capture     # run one module
 Requires: cocotb >= 2.0, iverilog + vvp on PATH.
 
-Targets: camera_capture, vga_display, frame_buffer, sccb_config
+Targets: camera_capture, vga_display, frame_buffer, sccb_config, line_buffer3, filter_edge
 """
 
 import os
@@ -43,6 +43,17 @@ TARGETS = {
         "sources":  [SRC / "sccb_config.v"],
         "module":   "test_sccb_config",
     },
+    "line_buffer3": {
+        "toplevel": "line_buffer3",
+        "sources":  [SRC / "line_buffer3.v"],
+        "module":   "test_line_buffer3",
+        "extra_compile_args": ["-P", "line_buffer3.WIDTH=8"],
+    },
+    "filter_edge": {
+        "toplevel": "filter_edge",
+        "sources":  [SRC / "filter_edge.v"],
+        "module":   "test_filter_edge",
+    },
 }
 
 
@@ -58,7 +69,7 @@ def run(name: str, cfg: dict):
     iverilog_cmd = [
         "iverilog", "-g2012",
         "-o", str(vvp_out),
-    ] + [str(s) for s in cfg["sources"]]
+    ] + cfg.get("extra_compile_args", []) + [str(s) for s in cfg["sources"]]
     print("Compile:", " ".join(iverilog_cmd))
     r = subprocess.run(iverilog_cmd)
     if r.returncode != 0:
