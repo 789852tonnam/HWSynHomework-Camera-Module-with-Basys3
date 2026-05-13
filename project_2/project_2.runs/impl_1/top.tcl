@@ -97,6 +97,10 @@ proc step_failed { step } {
 OPTRACE "impl_1" END { }
 }
 
+set_msg_config -id {Common 17-41} -limit 10000000
+set_msg_config -id {HDL-1065} -limit 10000
+set_msg_config -id {Synth 8-256} -limit 10000
+set_msg_config -id {Synth 8-638} -limit 10000
 
 OPTRACE "impl_1" START { ROLLUP_1 }
 OPTRACE "Phase: Init Design" START { ROLLUP_AUTO }
@@ -104,8 +108,10 @@ start_step init_design
 set ACTIVE_STEP init_design
 set rc [catch {
   create_msg_db init_design.pb
+  set_param checkpoint.writeSynthRtdsInDcp 1
   set_param general.usePosixSpawnForFork 1
   set_param chipscope.maxJobs 4
+  set_param synth.incrementalSynthesisCache C:/Users/78985/AppData/Roaming/Xilinx/Vivado/.Xil/Vivado-12772-TonnamCMW/incrSyn
   set_param xicom.use_bs_reader 1
   set_param runs.launchOptions { -jobs 16  }
 OPTRACE "create in-memory project" START { }
@@ -118,6 +124,8 @@ OPTRACE "create in-memory project" END { }
 OPTRACE "set parameters" START { }
   set_property webtalk.parent_dir C:/Users/78985/Desktop/HW-SynLab2025-main/project_2/project_2.cache/wt [current_project]
   set_property parent.project_path C:/Users/78985/Desktop/HW-SynLab2025-main/project_2/project_2.xpr [current_project]
+  set_property ip_repo_paths c:/Users/78985/AppData/Roaming/Xilinx/ip_repo [current_project]
+  update_ip_catalog
   set_property ip_output_repo C:/Users/78985/Desktop/HW-SynLab2025-main/project_2/project_2.cache/ip [current_project]
   set_property ip_cache_permissions {read write} [current_project]
 OPTRACE "set parameters" END { }

@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module vga_640x320_display(
     input clk_25m,
     input [11:0] pixel_in,

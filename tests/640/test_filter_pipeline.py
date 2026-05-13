@@ -7,10 +7,10 @@ Pipeline depth: BRAM-read (not modelled here) + filter = 2 cycles from input to 
 Inputs must be stable for 2 cycles before sampling rgb444_out.
 
 Mode encoding (sw_mode):
-  00 = RAW       (YCbCr → RGB444)
+  00 = RAW       (YCbCr -> RGB444)
   01 = INVERT    (bitwise NOT of RAW)
   10 = COLOR_ISO (pass selected channel; sw32: 00=R, 01=G, 10=B)
-  11 = EDGE      (3×3 Sobel on luma; flat field → 0)
+  11 = EDGE      (3×3 Sobel on luma; flat field -> 0)
 """
 
 import cocotb
@@ -46,8 +46,8 @@ async def _settle(dut, cycles=PIPE_DEPTH):
 # ---------------------------------------------------------------------------
 @cocotb.test()
 async def test_raw_nonzero(dut):
-    """RAW mode: mid-gray luma + mild chroma → non-zero RGB444 output."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    """RAW mode: mid-gray luma + mild chroma -> non-zero RGB444 output."""
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     dut.fb_luma.value   = 4          # mid-gray
@@ -64,7 +64,7 @@ async def test_raw_nonzero(dut):
 @cocotb.test()
 async def test_invert(dut):
     """INVERT mode must produce bitwise NOT of the RAW output for same input."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     dut.fb_luma.value   = 4
@@ -86,11 +86,11 @@ async def test_invert(dut):
 @cocotb.test()
 async def test_color_iso_r(dut):
     """COLOR_ISO sw32=00: only R nibble non-zero; G and B must be 0."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     dut.fb_luma.value   = 4
-    dut.fb_chroma.value = 0b1110    # cb=3 (strong+), cr=2 (mild+) → R non-zero
+    dut.fb_chroma.value = 0b1110    # cb=3 (strong+), cr=2 (mild+) -> R non-zero
     dut.sw_mode.value   = 0b10
     dut.sw32.value      = 0b00     # isolate R
     await _settle(dut)
@@ -107,11 +107,11 @@ async def test_color_iso_r(dut):
 @cocotb.test()
 async def test_color_iso_g(dut):
     """COLOR_ISO sw32=01: only G nibble non-zero; R and B must be 0."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     dut.fb_luma.value   = 5
-    dut.fb_chroma.value = 0b0000    # neutral → G should be non-zero (Y drives G)
+    dut.fb_chroma.value = 0b0000    # neutral -> G should be non-zero (Y drives G)
     dut.sw_mode.value   = 0b10
     dut.sw32.value      = 0b01     # isolate G
     await _settle(dut)
@@ -128,7 +128,7 @@ async def test_color_iso_g(dut):
 @cocotb.test()
 async def test_color_iso_b(dut):
     """COLOR_ISO sw32=10: only B nibble non-zero; R and G must be 0."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     dut.fb_luma.value   = 4
@@ -149,10 +149,10 @@ async def test_color_iso_b(dut):
 @cocotb.test()
 async def test_edge_flat_field(dut):
     """
-    EDGE mode on a flat field (constant luma) → Sobel magnitude = 0 → rgb444 = 0.
+    EDGE mode on a flat field (constant luma) -> Sobel magnitude = 0 -> rgb444 = 0.
     Fill 3 rows of line_buffer3 with constant luma, then check output.
     """
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     LUMA = 4

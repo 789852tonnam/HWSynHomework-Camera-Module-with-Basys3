@@ -43,7 +43,7 @@ async def _reset(dut):
 @cocotb.test()
 async def test_h_counter_wraps(dut):
     """h_count must never exceed 799 and must reach 799."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     max_h = 0
@@ -61,7 +61,7 @@ async def test_h_counter_wraps(dut):
 @cocotb.test()
 async def test_v_counter_wraps(dut):
     """v_count must reach 524 and wrap back to 0 (V_TOTAL=525)."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     max_v = 0
@@ -84,7 +84,7 @@ async def test_sync_polarity_and_active(dut):
       - hsync, vsync polarity vs counter windows
       - active_video matches (h<640) && (v<480)
     """
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     errors = []
@@ -121,7 +121,7 @@ async def test_fetch_active_and_rd_addr(dut):
     (prefetch window, except last line of frame).
     rd_addr must be 0 when NOT fetch_active.
     """
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     errors = []

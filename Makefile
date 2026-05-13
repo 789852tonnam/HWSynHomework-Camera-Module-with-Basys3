@@ -8,10 +8,10 @@
 sim: sim-640 sim-320   ## run all cocotb testbenches (640 + 320 paths)
 
 sim-640:               ## run 640-path cocotb tests  (rtl/)
-	$(MAKE) -C tests/640 all
+	python tests/640/run_tests.py
 
 sim-320:               ## run 320-path cocotb tests  (sources_1/new/)
-	$(MAKE) -C tests/320 all
+	python tests/320/run_tests.py
 
 # ── legacy iverilog testbenches (sim/) ───────────────────────────────────────
 
@@ -34,8 +34,7 @@ doc:                   ## regenerate documents/demo_ov7670.docx
 # ── clean ─────────────────────────────────────────────────────────────────────
 
 clean:                 ## remove cocotb sim_build dirs and results.xml
-	$(MAKE) -C tests/640 clean
-	$(MAKE) -C tests/320 clean
+	rm -rf tests/640/sim_build_* tests/320/sim_build_*
 	rm -f sim/640/*.vvp sim/320/*.vvp
 
 # ── help ──────────────────────────────────────────────────────────────────────

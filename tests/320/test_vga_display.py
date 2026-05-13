@@ -6,7 +6,7 @@ Standard VESA 640x480@60 Hz timing:
   V_TOTAL = 525  (active=480, FP=10, sync=2,  BP=33)
   HSYNC active-LOW: h in [656..751]
   VSYNC active-LOW: v in [490..491]
-  PIXEL_SKIP=20 → 310 valid fb columns
+  PIXEL_SKIP=20 -> 310 valid fb columns
   Horizontal upscale: img_x = (h_cnt * 496) >> 10
   Vertical downscale: img_y = v_cnt >> 1
   frame_addr = img_y * 320 + img_x  (combinational, using internal h_cnt/v_cnt)
@@ -17,7 +17,7 @@ copies (1-cycle delayed). frame_addr is combinational from the live counters.
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, ClockCycles
+from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly  # ReadOnly used in test_frame_addr_upscale_formula
 
 CLK_PERIOD_NS = 40   # 25 MHz
 H_TOTAL       = 800
@@ -37,7 +37,7 @@ async def test_h_v_counter_range(dut):
     pixel_x (registered h_cnt) must stay in [0..639] during observed cycles;
     pixel_y (registered v_cnt) must reach at least 479 over one frame.
     """
-    cocotb.start_soon(Clock(dut.clk_25m, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk_25m, CLK_PERIOD_NS, unit="ns").start())
 
     dut.pixel_in.value = 0xFFF
     await ClockCycles(dut.clk_25m, 4)   # let counters start
@@ -67,7 +67,7 @@ async def test_sync_polarity(dut):
     Note: there is a 1-cycle offset since pixel_x lags h_cnt, but the sync
     signals are combinational from h_cnt, so we test with a 1-cycle tolerance.
     """
-    cocotb.start_soon(Clock(dut.clk_25m, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk_25m, CLK_PERIOD_NS, unit="ns").start())
 
     dut.pixel_in.value = 0
     await ClockCycles(dut.clk_25m, 4)
@@ -93,7 +93,7 @@ async def test_sync_polarity(dut):
 @cocotb.test()
 async def test_vga_channels_when_active(dut):
     """When active=1, vga_r/g/b must equal the corresponding nibbles of pixel_in."""
-    cocotb.start_soon(Clock(dut.clk_25m, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk_25m, CLK_PERIOD_NS, unit="ns").start())
 
     pixel = 0xA5C
     dut.pixel_in.value = pixel
@@ -123,7 +123,7 @@ async def test_vga_channels_when_active(dut):
 @cocotb.test()
 async def test_vga_channels_blank_zero(dut):
     """When active=0, vga_r/g/b must all be 0 (blanking)."""
-    cocotb.start_soon(Clock(dut.clk_25m, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk_25m, CLK_PERIOD_NS, unit="ns").start())
 
     dut.pixel_in.value = 0xFFF
     await ClockCycles(dut.clk_25m, 4)
@@ -150,33 +150,46 @@ async def test_vga_channels_blank_zero(dut):
 @cocotb.test()
 async def test_frame_addr_upscale_formula(dut):
     """
-    Spot-check frame_addr formula: img_x = (h_cnt * 496) >> 10.
-    Run from reset (h_cnt=0) and verify frame_addr at the first few active pixels.
-    At h_cnt=0: img_x = 0, img_y = 0 → frame_addr = 0.
-    At h_cnt=2: img_x = (2*496)>>10 = 992>>10 = 0 → frame_addr = 0.
-    At h_cnt=3: img_x = (3*496)>>10 = 1488>>10 = 1 → frame_addr = 1.
-    (frame_addr is combinational, observable one cycle after h_cnt updates)
+    Verify frame_addr formula: img_x = (h_cnt * 496) >> 10.
+    h_cnt is internal; pixel_x is registered h_cnt (1-cycle behind).
+    At ReadOnly after posedge: h_cnt_actual = pixel_x + 1, v_cnt_actual = pixel_y.
+    Sync to pixel_x==0 (line start) so h_cnt is known, then check 20 cycles.
     """
-    cocotb.start_soon(Clock(dut.clk_25m, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk_25m, CLK_PERIOD_NS, unit="ns").start())
 
     dut.pixel_in.value = 0xFFF
-    await ClockCycles(dut.clk_25m, 2)   # module has initial h_cnt=0
+    await ClockCycles(dut.clk_25m, 4)
 
-    # Collect frame_addr at the first several cycles (h_cnt = 1..10 after 1st edge)
-    samples = []
-    for cycle in range(12):
+    # Sync: wait until pixel_x == 0 (h_cnt just wrapped to 1 after NBA)
+    for _ in range(H_TOTAL * 2):
         await RisingEdge(dut.clk_25m)
-        h_approx = cycle + 1   # h_cnt lags: at edge N, h_cnt = N (started at 0)
-        fa = int(dut.frame_addr.value)
-        samples.append((h_approx, fa))
+        await ReadOnly()
+        if int(dut.pixel_x.value) == 0:
+            break
+    else:
+        assert False, "Never observed pixel_x == 0 within 2 frames"
 
-    # Verify formula for h values in active region (h<640, v=0 so img_y=0)
-    coeff = 496
-    for h, fa in samples:
-        if h < H_ACTIVE:
-            img_x = (h * coeff) >> 10
-            exp_fa = img_x   # img_y=0, so frame_addr = 0*320 + img_x
-            assert fa == exp_fa, (
-                f"frame_addr at h_cnt~={h}: got {fa} expected {exp_fa} "
-                f"(img_x={img_x})"
-            )
+    # Check formula at the next 20 cycles
+    errors = []
+    for _ in range(20):
+        await RisingEdge(dut.clk_25m)
+        await ReadOnly()
+        px = int(dut.pixel_x.value)      # pre-NBA h_cnt
+        py = int(dut.pixel_y.value)      # v_cnt (accurate; no wrap in this window)
+        fa = int(dut.frame_addr.value)   # combinational from h_cnt_actual = px+1
+        h  = (px + 1) % H_TOTAL
+        v  = py
+
+        if h < H_ACTIVE and v < V_ACTIVE:
+            img_x  = (h * 496) >> 10
+            img_y  = v >> 1
+            exp_fa = img_y * 320 + img_x
+            if fa != exp_fa:
+                errors.append(
+                    f"h={h} v={v}: frame_addr={fa} expected={exp_fa} "
+                    f"(img_x={img_x} img_y={img_y})"
+                )
+        elif fa != 0:
+            errors.append(f"blank h={h} v={v}: frame_addr={fa} should be 0")
+
+    assert not errors, "\n".join(errors)

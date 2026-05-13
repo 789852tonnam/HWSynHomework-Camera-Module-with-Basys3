@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module camera_capture_640x320(
     input pclk, vsync, href,
     input [7:0] d_in,

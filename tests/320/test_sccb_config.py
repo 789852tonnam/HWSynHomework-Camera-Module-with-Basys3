@@ -41,7 +41,7 @@ def _read_siod(dut):
 @cocotb.test()
 async def test_sioc_not_stuck_high(dut):
     """sioc must go low within 200 clk cycles — verifies i2c_clk gen and FSM start."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await ClockCycles(dut.clk, 4)
 
     saw_low = False
@@ -58,7 +58,7 @@ async def test_sioc_not_stuck_high(dut):
 @cocotb.test()
 async def test_start_condition_occurs(dut):
     """Detect at least one SCCB START condition: siod=0 while sioc=1."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await ClockCycles(dut.clk, 4)
 
     # START visible ~cycle 97-159 (state 1 pulls SDA low while SCL=1)
@@ -79,7 +79,7 @@ async def test_start_condition_occurs(dut):
 @cocotb.test()
 async def test_stop_condition_occurs(dut):
     """Detect at least one SCCB STOP condition: siod rises to 1 while sioc=1."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await ClockCycles(dut.clk, 4)
 
     prev_siod = 1
@@ -102,7 +102,7 @@ async def test_stop_condition_occurs(dut):
 @cocotb.test()
 async def test_all_registers_sent(dut):
     """After TOTAL_CLOCKS, sioc stabilizes high — all 8 registers were transmitted."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await ClockCycles(dut.clk, TOTAL_CLOCKS)
 
     # If module is idle (reg_idx>=8), sioc stays 1 indefinitely

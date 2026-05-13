@@ -44,7 +44,7 @@ async def _drive(dut, in_y, in_cb, in_cr, h_pos, v_pos):
     dut.in_cr.value = in_cr
     dut.h_pos.value = h_pos
     dut.v_pos.value = v_pos
-    await Timer(1, units='ns')
+    await Timer(1, unit='ns')
 
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module frame_buffer_640x320(
     input clk_w, we,
     input [16:0] addr_w,  // ลดเหลือ 17-bit

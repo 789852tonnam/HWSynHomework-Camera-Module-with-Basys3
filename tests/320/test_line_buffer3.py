@@ -46,9 +46,9 @@ async def _drive_row(dut, luma_list, row_idx):
 @cocotb.test()
 async def test_reset_clears_outputs(dut):
     """After reset all window outputs are 0 (buffer initialised to 0)."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD, unit='ns').start())
     await _reset(dut)
-    await Timer(1, units='ns')
+    await Timer(1, unit='ns')
     for sig in [dut.top_l, dut.top_c, dut.top_r,
                 dut.mid_l, dut.mid_c, dut.mid_r,
                 dut.bot_l, dut.bot_c, dut.bot_r]:
@@ -58,14 +58,14 @@ async def test_reset_clears_outputs(dut):
 @cocotb.test()
 async def test_bot_r_forwarding(dut):
     """bot_r == pix_in one cycle after driving (not stale RAM value)."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD, unit='ns').start())
     await _reset(dut)
     dut.h_count.value   = 3
     dut.v_count.value   = 0
     dut.pix_in.value    = 5
     dut.pix_valid.value = 1
-    await RisingEdge(dut.clk)   # output registers latch pix_in → bot_r
-    await Timer(1, units='ns')
+    await RisingEdge(dut.clk)   # output registers latch pix_in -> bot_r
+    await Timer(1, unit='ns')
     got = int(dut.bot_r.value)
     assert got == 5, f"bot_r={got} expected 5 (forwarded from pix_in)"
     dut.pix_valid.value = 0
@@ -74,7 +74,7 @@ async def test_bot_r_forwarding(dut):
 @cocotb.test()
 async def test_three_rows_correct_assignment(dut):
     """After 3 rows: top=row0, mid=row1, bot=row2 at interior column."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD, unit='ns').start())
     await _reset(dut)
 
     # Distinct constant luma per row
@@ -93,7 +93,7 @@ async def test_three_rows_correct_assignment(dut):
         dut.pix_valid.value = 1
         await RisingEdge(dut.clk)
 
-    await Timer(1, units='ns')
+    await Timer(1, unit='ns')
     # col_r = 4, col_c = 3, col_l = 2 — all rows have constant value
     assert int(dut.top_r.value) == 1, f"top_r={int(dut.top_r.value)} expected row0=1"
     assert int(dut.mid_r.value) == 3, f"mid_r={int(dut.mid_r.value)} expected row1=3"
@@ -104,7 +104,7 @@ async def test_three_rows_correct_assignment(dut):
 @cocotb.test()
 async def test_row_wrap_evicts_oldest(dut):
     """After 4 rows: top=row1, mid=row2, bot=row3 (row0 evicted)."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD, unit='ns').start())
     await _reset(dut)
 
     await _drive_row(dut, [1] * WIDTH, 0)
@@ -118,7 +118,7 @@ async def test_row_wrap_evicts_oldest(dut):
         dut.pix_valid.value = 1
         await RisingEdge(dut.clk)
 
-    await Timer(1, units='ns')
+    await Timer(1, unit='ns')
     assert int(dut.top_r.value) == 3, f"top_r={int(dut.top_r.value)} expected 3 (row1)"
     assert int(dut.mid_r.value) == 5, f"mid_r={int(dut.mid_r.value)} expected 5 (row2)"
     assert int(dut.bot_r.value) == 7, f"bot_r={int(dut.bot_r.value)} expected 7 (row3, forwarded)"
@@ -128,12 +128,12 @@ async def test_row_wrap_evicts_oldest(dut):
 @cocotb.test()
 async def test_column_window_left_clamped(dut):
     """At h_count=0: col_l and col_c clamp to 0; all three _l/_c/_r reference col 0."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD, units='ns').start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD, unit='ns').start())
     await _reset(dut)
 
-    # Fill row0 with position-encoded values so col index is visible
-    row0 = list(range(WIDTH))   # row0[col] = col
-    row1 = [i + 10 for i in range(WIDTH)]
+    # Fill row0 with position-encoded values (0-7 fit in 3 bits for WIDTH=8)
+    row0 = [col % 8 for col in range(WIDTH)]      # row0[0]=0, row0[1]=1, ...
+    row1 = [(col + 5) % 8 for col in range(WIDTH)] # row1[0]=5, row1[1]=6, ...
     await _drive_row(dut, row0, 0)
     await _drive_row(dut, row1, 1)
 
@@ -143,13 +143,13 @@ async def test_column_window_left_clamped(dut):
     dut.pix_in.value    = 7
     dut.pix_valid.value = 1
     await RisingEdge(dut.clk)
-    await Timer(1, units='ns')
+    await Timer(1, unit='ns')
 
-    # col_l = max(0-2,0)=0, col_c = max(0-1,0)=0, col_r = 0
+    # col_l = max(0-2,0)=0, col_c = max(0-1,0)=0, col_r = 0  -- all clamp to col 0
     # top_l = top_c = top_r = row0[0] = 0
-    # mid_l = mid_c = mid_r = row1[0] = 10
-    assert int(dut.top_l.value) == 0  and int(dut.top_c.value) == 0  and int(dut.top_r.value) == 0, \
+    # mid_l = mid_c = mid_r = row1[0] = 5
+    assert int(dut.top_l.value) == 0 and int(dut.top_c.value) == 0 and int(dut.top_r.value) == 0, \
         f"top clamped wrong: l={int(dut.top_l.value)} c={int(dut.top_c.value)} r={int(dut.top_r.value)}"
-    assert int(dut.mid_l.value) == 10 and int(dut.mid_c.value) == 10 and int(dut.mid_r.value) == 10, \
+    assert int(dut.mid_l.value) == 5 and int(dut.mid_c.value) == 5 and int(dut.mid_r.value) == 5, \
         f"mid clamped wrong: l={int(dut.mid_l.value)} c={int(dut.mid_c.value)} r={int(dut.mid_r.value)}"
     dut.pix_valid.value = 0

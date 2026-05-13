@@ -63,13 +63,14 @@ HW-SynLab2025-main/
 │   │   ├── test_ycbcr_to_rgb444.py    ycbcr_to_rgb444 (LUT + clamp + dither)
 │   │   ├── run_tests.py               Python runner (no make required)
 │   │   └── Makefile                   make-based runner
-│   └── 320/                           four DUT targets for the sources_1/ path
+│   └── 320/                           six DUT targets for the sources_1/ path
 │       ├── test_camera_capture.py     camera_capture_640x320
 │       ├── test_vga_display.py        vga_640x320_display
 │       ├── test_frame_buffer.py       frame_buffer_640x320
 │       ├── test_sccb_config.py        sccb_config (8-register init sequence)
-│       ├── run_tests.py               Python runner
-│       └── Makefile
+│       ├── test_line_buffer3.py       line_buffer3 (3-row sliding window, WIDTH=8)
+│       ├── test_filter_edge.py        filter_edge (3×3 Sobel, threshold sweep)
+│       └── run_tests.py               Python runner
 ├── scripts/                          .tcl helpers for batch synth in Vivado
 ├── HW Synthesis Lab I 2025_2 - Final Project ... .pdf   the project brief
 └── basys3_rm-1525374-17687320973847.pdf                 Basys 3 reference manual
@@ -364,18 +365,18 @@ Requires `cocotb >= 2.0` and `iverilog` on PATH.
 cd tests/640
 python run_tests.py                          # all six
 python run_tests.py cam_capture sccb_master  # subset
-# or via make: make cam_capture / make all
 
-# 320 path — four targets
+# 320 path — six targets
 cd tests/320
-python run_tests.py                          # all four
-# or via make: make all
+python run_tests.py                          # all six
+python run_tests.py camera_capture sccb_config  # subset
 ```
 **640 targets:** `cam_capture`, `vga_timing`, `filter_pipeline`, `frame_buffer`, `sccb_master`, `ycbcr_to_rgb444`
 
-**320 targets:** `camera_capture`, `vga_display`, `frame_buffer`, `sccb_config`
+**320 targets:** `camera_capture`, `vga_display`, `frame_buffer`, `sccb_config`, `line_buffer3`, `filter_edge`
 
 `sccb_master` is compiled with `HALF_PER_CYCLES=4` (instead of the default 128) so the simulation completes in ~250 cycles instead of ~7900.
+`line_buffer3` is compiled with `WIDTH=8` to keep the distributed-RAM depth small for fast simulation.
 
 Each target rebuilds the DUT with icarus and runs the corresponding `test_*.py`.
 

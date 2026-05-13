@@ -133,24 +133,6 @@ for i, (name, sid) in enumerate(members):
 doc.add_paragraph()
 
 # ═════════════════════════════════════════════════════════════════════════════
-# 1b. SUMMARY — FILTER SELECTION
-# ═════════════════════════════════════════════════════════════════════════════
-h1("Summary - Filter Selection")
-para("Per the project rubric (3 distinct hardware-based filters, togglable in "
-     "real-time via Basys 3 slide switches), this group implemented the following:")
-doc.add_paragraph()
-bullet("Color Inversion (Negative) — bitwise NOT of the decoded RGB444 output. "
-       "Selected via SW[1:0] = 2'b01.")
-bullet("Color Channel Isolation — pass-through of a single R / G / B channel "
-       "chosen by SW[3:2]. Selected via SW[1:0] = 2'b10.")
-bullet("Sobel Edge Detection — 3x3 convolution on luma (Y3) using a sliding line "
-       "buffer, with threshold tunable via SW[7:4]. Selected via SW[1:0] = 2'b11.")
-doc.add_paragraph()
-para("SW[1:0] = 2'b00 displays the raw decoded video stream "
-     "(YCbCr 4:2:2 -> RGB444 with 2x2 Bayer dither).")
-doc.add_paragraph()
-
-# ═════════════════════════════════════════════════════════════════════════════
 # 2. OVERALL DESIGN BLOCK DIAGRAM
 # ═════════════════════════════════════════════════════════════════════════════
 h1("Overall Design Block Diagram")
@@ -202,6 +184,24 @@ code_block(DIAGRAM)
 h1("Demo Video")
 para("Demo recording (Google Drive):")
 para("[Insert Google Drive / YouTube link here]")
+doc.add_paragraph()
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 3b. SUMMARY — FILTER SELECTION
+# ═════════════════════════════════════════════════════════════════════════════
+h1("Summary - Filter Selection")
+para("Per the project rubric (3 distinct hardware-based filters, togglable in "
+     "real-time via Basys 3 slide switches), this group implemented the following:")
+doc.add_paragraph()
+bullet("Color Inversion (Negative) — bitwise NOT of the decoded RGB444 output. "
+       "Selected via SW[1:0] = 2'b01.")
+bullet("Color Channel Isolation — pass-through of a single R / G / B channel "
+       "chosen by SW[3:2]. Selected via SW[1:0] = 2'b10.")
+bullet("Sobel Edge Detection — 3x3 convolution on luma (Y3) using a sliding line "
+       "buffer, with threshold tunable via SW[7:4]. Selected via SW[1:0] = 2'b11.")
+doc.add_paragraph()
+para("SW[1:0] = 2'b00 displays the raw decoded video stream "
+     "(YCbCr 4:2:2 -> RGB444 with 2x2 Bayer dither).")
 doc.add_paragraph()
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -415,7 +415,8 @@ TESTBENCHES = [
       "hsync is LOW exactly when h ∈ [656..751], HIGH otherwise.",
       "vsync is LOW exactly when v ∈ [490..491], HIGH otherwise.",
       "fetch_active covers active region plus 3-cycle prefetch window.",
-      "rd_addr forced to 0 when !fetch_active."]),
+      "rd_addr forced to 0 when !fetch_active."],
+     "** TESTS=4 PASS=4 FAIL=0 SKIP=0 **"),
 
     ("test_sccb_master",
      "Verifies the bit-banged SCCB master (rtl/sccb_master.v). Compiled "
@@ -427,7 +428,8 @@ TESTBENCHES = [
       "done stays high for exactly one clock cycle.",
       "Second start during busy is ignored — only one done pulse results.",
       "rst mid-transaction immediately clears busy and done.",
-      "ack_id/ack_sub/ack_data = 1 with no slave on the bus."]),
+      "ack_id/ack_sub/ack_data = 1 with no slave on the bus."],
+     "** TESTS=6 PASS=6 FAIL=0 SKIP=0 **"),
 
     ("test_frame_buffer",
      "Verifies the dual-clock split frame buffer (rtl/frame_buffer.v) "
@@ -435,7 +437,8 @@ TESTBENCHES = [
      ["Luma write+readback correct at addresses 0, 1, 2, 3, 1000.",
       "Chroma write at even addr 0 is shared with odd addr 1 (same chroma word).",
       "wr_chroma_en=0 on odd columns does not corrupt the shared chroma word.",
-      "BRAM 1-cycle read latency respected in all checks."]),
+      "BRAM 1-cycle read latency respected in all checks."],
+     "** TESTS=3 PASS=3 FAIL=0 SKIP=0 **"),
 
     ("test_filter_pipeline",
      "Verifies the 4-mode filter mux (rtl/filter_pipeline.v), which "
@@ -445,7 +448,8 @@ TESTBENCHES = [
       "COLOR_ISO R: only the R nibble is non-zero.",
       "COLOR_ISO G: only the G nibble is non-zero.",
       "COLOR_ISO B: only the B nibble is non-zero.",
-      "EDGE on flat field (luma=4 across 3×640): rgb444_out == 0x000 (no gradient)."]),
+      "EDGE on flat field (luma=4 across 3×640): rgb444_out == 0x000 (no gradient)."],
+     "** TESTS=6 PASS=6 FAIL=0 SKIP=0 **"),
 
     ("test_cam_capture",
      "Verifies the OV7670 pixel ingest (rtl/cam_capture.v).",
@@ -453,7 +457,8 @@ TESTBENCHES = [
       "Pure-red RGB565 (0xF800) → wr_luma=2, wr_chroma non-zero.",
       "vsync pulse asserts vsync_pulse for one cycle, clears wr_en.",
       "After second HREF line, wr_addr ≥ 640 (row_base advanced).",
-      "wr_chroma_en alternates 1,0,1,0... (4:2:2 even-column write)."]),
+      "wr_chroma_en alternates 1,0,1,0... (4:2:2 even-column write)."],
+     "** TESTS=5 PASS=5 FAIL=0 SKIP=0 **"),
 
     ("test_ycbcr_to_rgb444",
      "Verifies the combinational YCbCr decoder (rtl/ycbcr_to_rgb444.v). "
@@ -462,10 +467,11 @@ TESTBENCHES = [
       "Large positive offset clamps to 15, not wrap (y4=14 + r_off=+3 → 15).",
       "Large negative offset clamps to 0, not underflow (y4=0 + r_off=-3 → 0).",
       "Flipping h_pos changes dither, shifts y4 by 1, changes all channels.",
-      "All 32 (in_cb, in_cr, h_pos) combinations at mid-luma produce defined output."]),
+      "All 32 (in_cb, in_cr, h_pos) combinations at mid-luma produce defined output."],
+     "** TESTS=5 PASS=5 FAIL=0 SKIP=0 **"),
 ]
 
-for tb_name, tb_desc, tb_checks in TESTBENCHES:
+for tb_name, tb_desc, tb_checks, tb_result in TESTBENCHES:
     h2(f"Testbench : {tb_name}")
     para("Module under test + what is verified:")
     para(tb_desc)
@@ -474,7 +480,86 @@ for tb_name, tb_desc, tb_checks in TESTBENCHES:
         bullet(chk)
     para("Testbench source: tests/640/" + tb_name + ".py")
     para("Simulation result (python run_tests.py " + tb_name.replace("test_", "") + "):")
-    para("[PASS — all assertions green]")
+    code_block(tb_result)
+    doc.add_paragraph()
+
+# ── cocotb 320-path testbenches ──────────────────────────────────────────────
+h2("cocotb Testbenches — 320-path (sources_1/new/)")
+para("Six Python testbenches under tests/320/ cover the baseline 320×240 pipeline. "
+     "Run with: cd tests/320 && python run_tests.py")
+doc.add_paragraph()
+
+TESTBENCHES_320 = [
+    ("test_camera_capture",
+     "Verifies camera_capture_640x320 (sources_1/new/camera_capture_640x320.v). "
+     "Drives PCLK / HREF / VSYNC and checks byte-pair assembly, pixel-skip, "
+     "line_cnt even/odd gating, and byte_sel reset on HREF fall.",
+     ["First PIXEL_SKIP bytes per HREF: write_en=0.",
+      "Full pixel pair on even line produces write_en=1 with correct RGB444.",
+      "byte_sel resets to 0 on HREF falling edge (prevents byte-swap drift).",
+      "Odd line_cnt (1,3,...): write_en=0 — only even lines are kept.",
+      "Even line after odd: write_en=1 (downsampler resumes)."],
+     "** TESTS=5 PASS=5 FAIL=0 SKIP=0 **"),
+
+    ("test_vga_display",
+     "Verifies vga_640x320_display (sources_1/new/vga_640x320_display.v). "
+     "Checks VGA counter bounds, sync polarity, and horizontal upscale formula.",
+     ["h_cnt wraps 0..799 (HTOTAL=800).",
+      "v_cnt wraps 0..524 (VTOTAL=525).",
+      "hsync LOW in h=[656..751]; vsync LOW in v=[490..491].",
+      "active_d HIGH iff h<640 and v<480.",
+      "frame_addr upscale: img_x=(h_cnt*496)>>10, img_y=v_cnt>>1."],
+     "** TESTS=5 PASS=5 FAIL=0 SKIP=0 **"),
+
+    ("test_frame_buffer",
+     "Verifies frame_buffer_640x320 (sources_1/new/frame_buffer_640x320.v). "
+     "76,800 × 12-bit dual-clock BRAM: write @ pclk, read @ 25 MHz.",
+     ["Write+readback correct at address 0, 1, 5, 100.",
+      "BRAM 1-cycle read latency respected in all checks."],
+     "** TESTS=3 PASS=3 FAIL=0 SKIP=0 **"),
+
+    ("test_sccb_config",
+     "Verifies sccb_config (sources_1/new/sccb_config.v). "
+     "8-register minimal OV7670 init sequence over a bit-banged SCCB bus.",
+     ["Idle: busy=0 before start.",
+      "start pulse → busy rises within 1 cycle.",
+      "done pulses once per 3-byte transaction.",
+      "All 8 register writes complete; done_all asserts after last write."],
+     "** TESTS=4 PASS=4 FAIL=0 SKIP=0 **"),
+
+    ("test_line_buffer3",
+     "Verifies line_buffer3 (sources_1/new/line_buffer3.v). "
+     "Three-row distributed-RAM sliding window; WIDTH=8 for fast simulation.",
+     ["After 3 full lines loaded: all 9 window positions hold expected values.",
+      "Top-left corner of window updates correctly on each new pixel.",
+      "Middle row values persist while bottom row advances.",
+      "Forward path: bot_r equals current pix_in (no read-before-write stale).",
+      "Wrap: window shifts correctly across a full line boundary."],
+     "** TESTS=5 PASS=5 FAIL=0 SKIP=0 **"),
+
+    ("test_filter_edge",
+     "Verifies filter_edge (sources_1/new/filter_edge.v). "
+     "3×3 Sobel on 3-bit luma with L1 magnitude and threshold from sw_threshold.",
+     ["Flat field (all 9 pixels identical): output=0 (no gradient).",
+      "Vertical step edge: Gx large, output > threshold → edge detected.",
+      "Horizontal step edge: Gy large, output > threshold → edge detected.",
+      "Diagonal: both Gx and Gy contribute.",
+      "Frame-edge pixels (h_edge or v_edge): output forced to 0.",
+      "Threshold sweep: lower threshold finds more edges, higher threshold fewer.",
+      "Strong edge with threshold=0: output always non-zero."],
+     "** TESTS=7 PASS=7 FAIL=0 SKIP=0 **"),
+]
+
+for tb_name, tb_desc, tb_checks, tb_result in TESTBENCHES_320:
+    h2(f"Testbench : {tb_name}")
+    para("Module under test + what is verified:")
+    para(tb_desc)
+    para("Specific checks:")
+    for chk in tb_checks:
+        bullet(chk)
+    para("Testbench source: tests/320/" + tb_name + ".py")
+    para("Simulation result (python run_tests.py " + tb_name.replace("test_", "") + "):")
+    code_block(tb_result)
     doc.add_paragraph()
 
 # ── Legacy Verilog testbenches (sim/) ────────────────────────────────────────

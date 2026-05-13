@@ -14,6 +14,7 @@ import os
 import sys
 import pathlib
 import subprocess
+import sysconfig
 import cocotb
 
 ROOT      = pathlib.Path(__file__).resolve().parent.parent.parent
@@ -57,6 +58,22 @@ TARGETS = {
 }
 
 
+def _write_dump_v(build_dir: pathlib.Path, toplevel: str) -> pathlib.Path:
+    """Generate a Verilog dump module that writes a VCD waveform file."""
+    vcd_path = (build_dir / "dump.vcd").as_posix()
+    dump_v   = build_dir / "dump.v"
+    dump_v.write_text(
+        f'`timescale 1ns/1ps\n'
+        f'module dump;\n'
+        f'  initial begin\n'
+        f'    $dumpfile("{vcd_path}");\n'
+        f'    $dumpvars(0, {toplevel});\n'
+        f'  end\n'
+        f'endmodule\n'
+    )
+    return dump_v
+
+
 def run(name: str, cfg: dict):
     print(f"\n{'='*60}")
     print(f"  Running: {name}")
@@ -66,24 +83,34 @@ def run(name: str, cfg: dict):
     build_dir.mkdir(exist_ok=True)
     vvp_out = build_dir / "sim.vvp"
 
+    dump_v = _write_dump_v(build_dir, cfg["toplevel"])
+
     iverilog_cmd = [
         "iverilog", "-g2012",
         "-o", str(vvp_out),
-    ] + cfg.get("extra_compile_args", []) + [str(s) for s in cfg["sources"]]
+    ] + cfg.get("extra_compile_args", []) + [str(s) for s in cfg["sources"]] + [str(dump_v)]
     print("Compile:", " ".join(iverilog_cmd))
     r = subprocess.run(iverilog_cmd)
     if r.returncode != 0:
         print(f"COMPILE FAILED for {name}")
         sys.exit(r.returncode)
 
+    stdlib     = sysconfig.get_path("stdlib")
+    platstdlib = sysconfig.get_path("platstdlib")
+    purelib    = sysconfig.get_path("purelib")
+
     env = os.environ.copy()
-    env["MODULE"]            = cfg["module"]
-    env["TOPLEVEL"]          = cfg["toplevel"]
-    env["TOPLEVEL_LANG"]     = "verilog"
-    env["COCOTB_SIM_NAME"]   = "icarus"
-    env["PYTHONPATH"]        = str(HERE) + os.pathsep + env.get("PYTHONPATH", "")
-    env["PYGPI_PYTHON_BIN"]  = sys.executable
-    env["PATH"]              = str(LIBS_DIR) + os.pathsep + env.get("PATH", "")
+    env["COCOTB_TEST_MODULES"] = cfg["module"]
+    env["COCOTB_TOPLEVEL"]     = cfg["toplevel"]
+    env["TOPLEVEL_LANG"]       = "verilog"
+    env["COCOTB_SIM_NAME"]     = "icarus"
+    env["PYGPI_PYTHON_BIN"]    = sys.executable
+    env["PYTHONHOME"]          = sys.prefix
+    env["PYTHONPATH"]          = os.pathsep.join(filter(None, [
+        str(HERE), stdlib, platstdlib, purelib, env.get("PYTHONPATH", "")
+    ]))
+    # LIBS_DIR first (cocotbvpi_icarus.vpl), then Python home (hon313.dll deps)
+    env["PATH"]                = os.pathsep.join([str(LIBS_DIR), sys.prefix, env.get("PATH", "")])
 
     vvp_cmd = [
         "vvp",
@@ -98,13 +125,33 @@ def run(name: str, cfg: dict):
         sys.exit(r.returncode)
 
 
+_FALLBACK_PYTHONS = [
+    r"C:\Users\78985\miniconda3\python.exe",
+    r"C:\Users\78985\anaconda3\python.exe",
+    r"C:\Python313\python.exe",
+    r"C:\Python312\python.exe",
+    r"C:\Python311\python.exe",
+    r"C:\Program Files\Python313\python.exe",
+    r"C:\Program Files\Python312\python.exe",
+]
+
+
 def _check_python():
-    if "WindowsApps" in sys.executable or "AppData\\Local\\Microsoft" in sys.executable:
-        print("WARNING: Windows Store Python detected.", file=sys.stderr)
-        print("  cocotb embedding fails in vvp due to AppContainer DLL restrictions.", file=sys.stderr)
-        print("  Install Python from https://www.python.org/downloads/ and re-run.", file=sys.stderr)
-        print("  Or use WSL where the tests work without modification.", file=sys.stderr)
-        sys.exit(1)
+    """Re-exec with a non-Store Python if Windows Store Python is detected."""
+    if "WindowsApps" not in sys.executable and \
+       "AppData\\Local\\Microsoft" not in sys.executable:
+        return  # already a real Python
+
+    for candidate in _FALLBACK_PYTHONS:
+        if pathlib.Path(candidate).exists():
+            print(f"Windows Store Python detected — re-executing with {candidate}", file=sys.stderr)
+            os.execv(candidate, [candidate] + sys.argv)
+            # os.execv replaces the process; nothing below runs if successful
+
+    print("ERROR: Windows Store Python detected and no fallback Python found.", file=sys.stderr)
+    print("  Install Python from https://www.python.org/downloads/", file=sys.stderr)
+    print("  or activate a conda environment before running.", file=sys.stderr)
+    sys.exit(1)
 
 
 if __name__ == "__main__":

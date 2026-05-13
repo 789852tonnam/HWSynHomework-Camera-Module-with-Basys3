@@ -56,9 +56,15 @@ if {$::dispatch::connected} {
 }
 
 OPTRACE "synth_1" START { ROLLUP_AUTO }
+set_param checkpoint.writeSynthRtdsInDcp 1
 set_param general.usePosixSpawnForFork 1
 set_param chipscope.maxJobs 4
+set_param synth.incrementalSynthesisCache C:/Users/78985/AppData/Roaming/Xilinx/Vivado/.Xil/Vivado-12772-TonnamCMW/incrSyn
 set_param xicom.use_bs_reader 1
+set_msg_config -id {Common 17-41} -limit 10000000
+set_msg_config -id {HDL-1065} -limit 10000
+set_msg_config -id {Synth 8-256} -limit 10000
+set_msg_config -id {Synth 8-638} -limit 10000
 OPTRACE "Creating in-memory project" START { }
 create_project -in_memory -part xc7a35tcpg236-1
 
@@ -71,6 +77,8 @@ set_property default_lib xil_defaultlib [current_project]
 set_property target_language Verilog [current_project]
 set_property board_part_repo_paths {C:/Users/78985/AppData/Roaming/Xilinx/Vivado/2025.2/xhub/board_store/xilinx_board_store} [current_project]
 set_property board_part digilentinc.com:basys3:part0:1.2 [current_project]
+set_property ip_repo_paths c:/Users/78985/AppData/Roaming/Xilinx/ip_repo [current_project]
+update_ip_catalog
 set_property ip_output_repo c:/Users/78985/Desktop/HW-SynLab2025-main/project_2/project_2.cache/ip [current_project]
 set_property ip_cache_permissions {read write} [current_project]
 OPTRACE "Creating in-memory project" END { }

@@ -13,7 +13,7 @@ Invariants checked:
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, ClockCycles
+from cocotb.triggers import RisingEdge, ClockCycles, FallingEdge
 
 CLK_PERIOD_NS = 10   # use same clock for both ports (avoids CDC complexity)
 LAST_ADDR     = 76_799
@@ -30,10 +30,13 @@ async def _write(dut, addr: int, data: int):
 
 
 async def _read(dut, addr: int) -> int:
-    """Read from addr; 1-cycle BRAM latency → sample one edge later."""
+    """Read from addr; 1-cycle BRAM latency -> sample after NBA commits.
+    FallingEdge escapes the caller's active posedge timestep so we don't
+    race against clk_w. Second FallingEdge waits until NBA commits dout."""
     dut.addr_r.value = addr
-    await RisingEdge(dut.clk_r)   # address presented
-    await RisingEdge(dut.clk_r)   # data out after 1-cycle latency
+    await FallingEdge(dut.clk_r)  # escape caller's posedge timestep
+    await RisingEdge(dut.clk_r)   # BRAM latches addr_r -> dout <= mem[addr]
+    await FallingEdge(dut.clk_r)  # NBA committed; active region (driveable)
     return int(dut.dout.value)
 
 
@@ -41,8 +44,8 @@ async def _read(dut, addr: int) -> int:
 @cocotb.test()
 async def test_write_readback(dut):
     """Write distinct values to several addresses; verify read-back."""
-    cocotb.start_soon(Clock(dut.clk_w, CLK_PERIOD_NS, units="ns").start())
-    cocotb.start_soon(Clock(dut.clk_r, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk_w, CLK_PERIOD_NS, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk_r, CLK_PERIOD_NS, unit="ns").start())
 
     dut.we.value     = 0
     dut.addr_w.value = 0
@@ -72,8 +75,8 @@ async def test_write_readback(dut):
 @cocotb.test()
 async def test_we_gate(dut):
     """we=0 must not overwrite an existing value."""
-    cocotb.start_soon(Clock(dut.clk_w, CLK_PERIOD_NS, units="ns").start())
-    cocotb.start_soon(Clock(dut.clk_r, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk_w, CLK_PERIOD_NS, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk_r, CLK_PERIOD_NS, unit="ns").start())
 
     dut.we.value     = 0
     dut.addr_w.value = 0
@@ -100,8 +103,8 @@ async def test_we_gate(dut):
 @cocotb.test()
 async def test_last_address_accessible(dut):
     """Address 76799 (last pixel) must be writable and readable."""
-    cocotb.start_soon(Clock(dut.clk_w, CLK_PERIOD_NS, units="ns").start())
-    cocotb.start_soon(Clock(dut.clk_r, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk_w, CLK_PERIOD_NS, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk_r, CLK_PERIOD_NS, unit="ns").start())
 
     dut.we.value     = 0
     dut.addr_w.value = 0

@@ -16,7 +16,7 @@ With HALF_PER_CYCLES=4:
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, ClockCycles
+from cocotb.triggers import RisingEdge, ClockCycles, FallingEdge
 
 CLK_PERIOD_NS = 40    # 25 MHz
 HALF_PER      = 4     # must match -P sccb_master.HALF_PER_CYCLES=4
@@ -35,13 +35,15 @@ async def _reset(dut):
 
 
 async def _send(dut, id_byte=0x42, sub=0x12, data=0xAB):
-    """Pulse start for one clock cycle; caller then monitors done."""
+    """Pulse start for one clock cycle; caller then monitors done.
+    Returns after FallingEdge so busy NBA is committed before caller asserts."""
     dut.id.value       = id_byte
     dut.sub_addr.value = sub
     dut.data.value     = data
     dut.start.value    = 1
     await RisingEdge(dut.clk)
     dut.start.value = 0
+    await FallingEdge(dut.clk)  # NBA committed: busy=1 visible to caller
 
 
 async def _wait_done(dut, timeout=400):
@@ -57,7 +59,7 @@ async def _wait_done(dut, timeout=400):
 @cocotb.test()
 async def test_idle_state(dut):
     """After reset: busy=0, done=0."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     assert int(dut.busy.value) == 0, "busy should be 0 at idle"
@@ -68,7 +70,7 @@ async def test_idle_state(dut):
 @cocotb.test()
 async def test_busy_rises_and_done_pulses(dut):
     """start -> busy=1; done pulses exactly once; busy falls after done."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     await _send(dut, id_byte=0x42, sub=0x11, data=0x01)
@@ -88,7 +90,7 @@ async def test_busy_rises_and_done_pulses(dut):
 @cocotb.test()
 async def test_done_one_cycle_only(dut):
     """done must stay 1 for exactly one clock cycle."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     await _send(dut, id_byte=0x42, sub=0x12, data=0xAB)
@@ -103,7 +105,7 @@ async def test_done_one_cycle_only(dut):
 @cocotb.test()
 async def test_start_ignored_while_busy(dut):
     """A second start during busy is ignored; only one done pulse results."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     await _send(dut, id_byte=0x42, sub=0x11, data=0x01)
@@ -127,7 +129,7 @@ async def test_start_ignored_while_busy(dut):
 @cocotb.test()
 async def test_reset_clears_busy(dut):
     """rst=1 mid-transaction clears busy and done immediately."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     await _send(dut, id_byte=0x42, sub=0x11, data=0x01)
@@ -146,7 +148,7 @@ async def test_reset_clears_busy(dut):
 @cocotb.test()
 async def test_ack_fields_after_no_slave(dut):
     """With no slave on the bus, SDA floats high during DC slots -> ack_* = 1."""
-    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     await _reset(dut)
 
     await _send(dut, id_byte=0x42, sub=0x3A, data=0x04)

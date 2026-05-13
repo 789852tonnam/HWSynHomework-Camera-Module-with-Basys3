@@ -7,14 +7,14 @@ Geometry:
   chroma address = wr_addr[18:1]  — adjacent even/odd pixels share one word
 
 Invariants checked:
-  - Luma write → read-back with 1-cycle BRAM latency
+  - Luma write -> read-back with 1-cycle BRAM latency
   - wr_chroma_en=0 does NOT overwrite chroma
   - Chroma 4:2:2 sharing: odd pixel reads the same chroma word as its even neighbour
 """
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, ClockCycles
+from cocotb.triggers import RisingEdge, ClockCycles, FallingEdge
 
 CLK_PERIOD_NS = 10   # one clock drives both ports (avoids CDC for test simplicity)
 
@@ -32,10 +32,12 @@ async def _write_pixel(dut, addr: int, luma: int, chroma: int, chroma_en: int):
 
 
 async def _read_pixel(dut, addr: int):
-    """Read luma and chroma at addr with 1-cycle BRAM latency."""
+    """Read luma and chroma at addr with 1-cycle BRAM latency.
+    FallingEdge after each posedge ensures NBA commits and active region for next drive."""
     dut.rd_addr.value = addr
-    await RisingEdge(dut.rd_clk)   # address registered
-    await RisingEdge(dut.rd_clk)   # data out (1-cycle latency)
+    await FallingEdge(dut.rd_clk)  # escape caller's posedge timestep
+    await RisingEdge(dut.rd_clk)   # BRAM latches addr -> dout NBA pending
+    await FallingEdge(dut.rd_clk)  # NBA committed; active region (driveable)
     return int(dut.rd_luma.value), int(dut.rd_chroma.value)
 
 
@@ -43,7 +45,7 @@ async def _read_pixel(dut, addr: int):
 @cocotb.test()
 async def test_luma_write_readback(dut):
     """Write distinct luma values to several addresses; read them back."""
-    cocotb.start_soon(Clock(dut.wr_clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.wr_clk, CLK_PERIOD_NS, unit="ns").start())
 
     dut.rd_clk.value       = 0
     dut.rd_addr.value      = 0
@@ -52,7 +54,7 @@ async def test_luma_write_readback(dut):
     await ClockCycles(dut.wr_clk, 2)
 
     # Piggyback rd_clk from wr_clk for test simplicity
-    cocotb.start_soon(Clock(dut.rd_clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.rd_clk, CLK_PERIOD_NS, unit="ns").start())
     await ClockCycles(dut.wr_clk, 2)
 
     test_cases = [
@@ -80,8 +82,8 @@ async def test_chroma_4to2to2_sharing(dut):
     Even address writes chroma; odd address (same pair) reads the same word.
     Even addr=0 and odd addr=1 share chroma_mem[0].
     """
-    cocotb.start_soon(Clock(dut.wr_clk, CLK_PERIOD_NS, units="ns").start())
-    cocotb.start_soon(Clock(dut.rd_clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.wr_clk, CLK_PERIOD_NS, unit="ns").start())
+    cocotb.start_soon(Clock(dut.rd_clk, CLK_PERIOD_NS, unit="ns").start())
 
     dut.wr_en.value        = 0
     dut.wr_chroma_en.value = 0
@@ -105,8 +107,8 @@ async def test_chroma_4to2to2_sharing(dut):
 @cocotb.test()
 async def test_chroma_en_gate(dut):
     """wr_chroma_en=0 must NOT overwrite an existing chroma value."""
-    cocotb.start_soon(Clock(dut.wr_clk, CLK_PERIOD_NS, units="ns").start())
-    cocotb.start_soon(Clock(dut.rd_clk, CLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.wr_clk, CLK_PERIOD_NS, unit="ns").start())
+    cocotb.start_soon(Clock(dut.rd_clk, CLK_PERIOD_NS, unit="ns").start())
 
     dut.wr_en.value        = 0
     dut.wr_chroma_en.value = 0

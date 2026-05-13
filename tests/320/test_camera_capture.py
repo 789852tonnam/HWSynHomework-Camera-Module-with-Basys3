@@ -21,7 +21,7 @@ Invariants checked:
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, ClockCycles
+from cocotb.triggers import RisingEdge, ClockCycles, FallingEdge
 
 PCLK_PERIOD_NS = 20
 PIXEL_SKIP     = 20   # must match localparam in camera_capture_640x320.v
@@ -43,6 +43,7 @@ async def _send_pixel(dut, high: int, low: int):
     await RisingEdge(dut.pclk)
     dut.d_in.value = low
     await RisingEdge(dut.pclk)
+    await FallingEdge(dut.pclk)  # NBA commits by falling edge; active region, driveable
     return int(dut.write_en.value)
 
 
@@ -65,7 +66,7 @@ async def _href_line(dut, n_pixels: int, high: int = 0xF8, low: int = 0x00):
 @cocotb.test()
 async def test_pixel_skip(dut):
     """First PIXEL_SKIP pixels of line 0 (even) must NOT produce write_en."""
-    cocotb.start_soon(Clock(dut.pclk, PCLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.pclk, PCLK_PERIOD_NS, unit="ns").start())
     await _vsync_reset(dut)
 
     dut.href.value = 1
@@ -82,7 +83,7 @@ async def test_even_pixel_writes_odd_does_not(dut):
     After PIXEL_SKIP, pixels with even pxl_cnt produce write_en=1;
     pixels with odd pxl_cnt do NOT (2:1 horizontal downsample).
     """
-    cocotb.start_soon(Clock(dut.pclk, PCLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.pclk, PCLK_PERIOD_NS, unit="ns").start())
     await _vsync_reset(dut)
 
     results = await _href_line(dut, PIXEL_SKIP + 10)
@@ -101,7 +102,7 @@ async def test_even_pixel_writes_odd_does_not(dut):
 @cocotb.test()
 async def test_odd_line_no_writes(dut):
     """Camera line 1 (odd line_cnt) must produce no write_en (vertical 2:1)."""
-    cocotb.start_soon(Clock(dut.pclk, PCLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.pclk, PCLK_PERIOD_NS, unit="ns").start())
     await _vsync_reset(dut)
 
     # Send line 0 (even) — some writes expected (ignore)
@@ -117,7 +118,7 @@ async def test_odd_line_no_writes(dut):
 @cocotb.test()
 async def test_row_base_advances(dut):
     """After line 0 (even), row_base advances by 320; line 1 (odd) does not."""
-    cocotb.start_soon(Clock(dut.pclk, PCLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.pclk, PCLK_PERIOD_NS, unit="ns").start())
     await _vsync_reset(dut)
 
     def first_write_addr(results):
@@ -136,7 +137,7 @@ async def test_row_base_advances(dut):
     # Line 1 (odd): no writes
     await _href_line(dut, PIXEL_SKIP + 4)
 
-    # Line 2 (even): row_base = 320 → first addr >= 320
+    # Line 2 (even): row_base = 320 -> first addr >= 320
     r2 = await _href_line(dut, PIXEL_SKIP + 4)
     addr2 = first_write_addr(r2)
     assert addr2 is not None and addr2 >= 320, (
@@ -151,20 +152,23 @@ async def test_byte_sel_reset_on_href_fall(dut):
     byte_sel must reset on HREF fall so the next line always starts with
     the first byte (no byte-swap drift).
     """
-    cocotb.start_soon(Clock(dut.pclk, PCLK_PERIOD_NS, units="ns").start())
+    cocotb.start_soon(Clock(dut.pclk, PCLK_PERIOD_NS, unit="ns").start())
     await _vsync_reset(dut)
 
-    # Send only 1 byte (leave byte_sel=1 mid-pixel) then drop HREF
+    # Send only 1 byte (leave byte_sel=1 mid-pixel) then drop HREF.
+    # This partial line increments line_cnt: 0 -> 1 (odd).
     dut.href.value = 1
     dut.d_in.value = 0xF8
     await RisingEdge(dut.pclk)
-    dut.href.value = 0              # fall mid-pixel
+    dut.href.value = 0              # fall mid-pixel; line_cnt 0->1
     await ClockCycles(dut.pclk, 3)
 
-    # Next line: first valid write should appear (byte pairing is aligned)
+    # Line 1 (odd): no writes expected; line_cnt 1->2 at end.
+    await _href_line(dut, PIXEL_SKIP + 4)
+
+    # Line 2 (even): writes must occur if byte_sel was properly reset on each HREF fall.
     results = await _href_line(dut, PIXEL_SKIP + 4)
     valid_writes = [we for _, we, _ in results if we == 1]
-    # Line 0 (even) should have some writes after skip
     assert len(valid_writes) > 0, (
-        "No writes after HREF fall mid-pixel — byte_sel may not have reset"
+        "No writes on even line after HREF fall mid-pixel — byte_sel may not have reset"
     )

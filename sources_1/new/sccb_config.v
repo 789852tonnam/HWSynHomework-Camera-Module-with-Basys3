@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module sccb_config(
     input clk,            // Master Clock (เช่น 25MHz)
     output sioc,          // SIO_C (Clock)

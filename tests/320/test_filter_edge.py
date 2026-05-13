@@ -33,14 +33,14 @@ async def _drive(dut, window, threshold=1, h_edge=0, v_edge=0):
     dut.threshold.value = threshold
     dut.h_edge.value   = h_edge
     dut.v_edge.value   = v_edge
-    await Timer(1, units='ns')
+    await Timer(1, unit='ns')
 
 
 # ── tests ────────────────────────────────────────────────────────────────────
 
 @cocotb.test()
 async def test_flat_field_no_edge(dut):
-    """Uniform luma → Gx=0, Gy=0 → mag=0 → output 0x000."""
+    """Uniform luma -> Gx=0, Gy=0 -> mag=0 -> output 0x000."""
     w = [(4, 4, 4), (4, 4, 4), (4, 4, 4)]
     await _drive(dut, w, threshold=1)
     got = int(dut.out_rgb444.value)
@@ -49,7 +49,7 @@ async def test_flat_field_no_edge(dut):
 
 @cocotb.test()
 async def test_vertical_step_edge(dut):
-    """Left col=0, right col=7 → strong Gx → output 0xFFF."""
+    """Left col=0, right col=7 -> strong Gx -> output 0xFFF."""
     w = [(0, 0, 7), (0, 0, 7), (0, 0, 7)]
     await _drive(dut, w, threshold=1)
     exp = _sobel_ref(w, 1, 0, 0)
@@ -59,7 +59,7 @@ async def test_vertical_step_edge(dut):
 
 @cocotb.test()
 async def test_horizontal_step_edge(dut):
-    """Top row=0, bot row=7 → strong Gy → output 0xFFF."""
+    """Top row=0, bot row=7 -> strong Gy -> output 0xFFF."""
     w = [(0, 0, 0), (0, 0, 0), (7, 7, 7)]
     await _drive(dut, w, threshold=1)
     exp = _sobel_ref(w, 1, 0, 0)
@@ -69,7 +69,7 @@ async def test_horizontal_step_edge(dut):
 
 @cocotb.test()
 async def test_h_edge_forces_black(dut):
-    """h_edge=1 → 0x000 regardless of gradient."""
+    """h_edge=1 -> 0x000 regardless of gradient."""
     w = [(0, 0, 7), (0, 0, 7), (0, 0, 7)]
     await _drive(dut, w, threshold=1, h_edge=1)
     got = int(dut.out_rgb444.value)
@@ -78,7 +78,7 @@ async def test_h_edge_forces_black(dut):
 
 @cocotb.test()
 async def test_v_edge_forces_black(dut):
-    """v_edge=1 → 0x000 regardless of gradient."""
+    """v_edge=1 -> 0x000 regardless of gradient."""
     w = [(0, 0, 0), (0, 0, 0), (7, 7, 7)]
     await _drive(dut, w, threshold=1, v_edge=1)
     got = int(dut.out_rgb444.value)
@@ -87,8 +87,8 @@ async def test_v_edge_forces_black(dut):
 
 @cocotb.test()
 async def test_below_threshold(dut):
-    """Small gradient below threshold → 0x000."""
-    # Gx = 1+2+1 = 4, threshold=15 → 4 > 15 is False
+    """Small gradient below threshold -> 0x000."""
+    # Gx = 1+2+1 = 4, threshold=15 -> 4 > 15 is False
     w = [(0, 0, 1), (0, 0, 1), (0, 0, 1)]
     await _drive(dut, w, threshold=15)
     exp = _sobel_ref(w, 15, 0, 0)

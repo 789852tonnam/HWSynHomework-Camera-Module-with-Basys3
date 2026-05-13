@@ -58,7 +58,6 @@ if {$::dispatch::connected} {
 OPTRACE "synth_2" START { ROLLUP_AUTO }
 set_param general.usePosixSpawnForFork 1
 set_param chipscope.maxJobs 4
-set_param xicom.use_bs_reader 1
 OPTRACE "Creating in-memory project" START { }
 create_project -in_memory -part xc7a35tcpg236-1
 
@@ -71,6 +70,8 @@ set_property default_lib xil_defaultlib [current_project]
 set_property target_language Verilog [current_project]
 set_property board_part_repo_paths {C:/Users/78985/AppData/Roaming/Xilinx/Vivado/2025.2/xhub/board_store/xilinx_board_store} [current_project]
 set_property board_part digilentinc.com:basys3:part0:1.2 [current_project]
+set_property ip_repo_paths c:/Users/78985/AppData/Roaming/Xilinx/ip_repo [current_project]
+update_ip_catalog
 set_property ip_output_repo c:/Users/78985/Desktop/HW-SynLab2025-main/project_2/project_2.cache/ip [current_project]
 set_property ip_cache_permissions {read write} [current_project]
 OPTRACE "Creating in-memory project" END { }
@@ -79,7 +80,9 @@ add_files -quiet C:/Users/78985/Desktop/HW-SynLab2025-main/project_2/project_2.r
 set_property used_in_implementation false [get_files C:/Users/78985/Desktop/HW-SynLab2025-main/project_2/project_2.runs/clk_wiz_0_synth_1/clk_wiz_0.dcp]
 read_verilog -library xil_defaultlib {
   C:/Users/78985/Desktop/HW-SynLab2025-main/sources_1/new/camera_capture_640x320.v
+  C:/Users/78985/Desktop/HW-SynLab2025-main/rtl/filter_edge.v
   C:/Users/78985/Desktop/HW-SynLab2025-main/sources_1/new/frame_buffer_640x320.v
+  C:/Users/78985/Desktop/HW-SynLab2025-main/rtl/line_buffer3.v
   C:/Users/78985/Desktop/HW-SynLab2025-main/sources_1/new/sccb_config.v
   C:/Users/78985/Desktop/HW-SynLab2025-main/sources_1/new/vga_640x320_display.v
   C:/Users/78985/Desktop/HW-SynLab2025-main/sources_1/new/top_module.v
@@ -97,6 +100,8 @@ read_xdc C:/Users/78985/Desktop/HW-SynLab2025-main/constrs_1/new/constraints.xdc
 set_property used_in_implementation false [get_files C:/Users/78985/Desktop/HW-SynLab2025-main/constrs_1/new/constraints.xdc]
 
 set_param ips.enableIPCacheLiteLoad 1
+
+read_checkpoint -auto_incremental -incremental C:/Users/78985/Desktop/HW-SynLab2025-main/project_2/project_2.srcs/utils_1/imports/synth_2/top_module.dcp
 close [open __synthesis_is_running__ w]
 
 OPTRACE "synth_design" START { }
