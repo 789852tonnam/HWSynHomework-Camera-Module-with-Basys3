@@ -44,9 +44,7 @@ HW-SynLab2025-main/
 │   ├── frame_buffer_640x320.v         76,800 × 12 b BRAM
 │   ├── vga_640x320_display.v          VGA timing + horizontal scale to 640
 │   ├── sccb_config.v                  8-register SCCB init (4-phase FSM)
-│   ├── sobel_edge_filter.v            unused alternative edge module
-│   ├── filter_edge.v / line_buffer3.v copies of rtl versions for the 320 path
-│   └── modules_append.v               appendable copy used by some Vivado scripts
+│   └── filter_edge.v / line_buffer3.v copies of rtl versions for the 320 path
 │
 ├── constrs_1/new/
 │   ├── constraints.xdc                pin map for sources_1 (top_module)
@@ -71,7 +69,6 @@ HW-SynLab2025-main/
 │       ├── test_line_buffer3.py       line_buffer3 (3-row sliding window, WIDTH=8)
 │       ├── test_filter_edge.py        filter_edge (3×3 Sobel, threshold sweep)
 │       └── run_tests.py               Python runner
-├── scripts/                          .tcl helpers for batch synth in Vivado
 ├── HW Synthesis Lab I 2025_2 - Final Project ... .pdf   the project brief
 └── basys3_rm-1525374-17687320973847.pdf                 Basys 3 reference manual
 ```
@@ -348,7 +345,6 @@ The trap: reading **bottom-row column h** (== current `h_count`) from the same b
    - 320 path: enable `sources_1/new/*.v`, set `top_module` as top, enable `constrs_1/new/constraints.xdc`, **disable** `constraints_rtl.xdc`.
    - 640 path: enable `rtl/*.v`, set `top` as top, enable `constraints_rtl.xdc`, **disable** `constraints.xdc`.
 3. Run synthesis → implementation → generate bitstream → program board.
-4. The `scripts/*.tcl` files automate parts of this for batch runs.
 
 ### Simulation
 
