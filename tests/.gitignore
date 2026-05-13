@@ -1,4 +1,5 @@
-sim_build_*/
+sim_build_*/*.vcd
+sim_build_*/*.vvp
 results.xml
 __pycache__/
 *.pyc
